@@ -1,0 +1,190 @@
+-- ============================================
+-- ADMINISTRATIVE HIERARCHY
+-- ============================================
+
+-- Regions (top level)
+CREATE TABLE regions (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL UNIQUE,
+  name_nl VARCHAR(100), -- Dutch name
+  name_fr VARCHAR(100), -- French name
+  name_de VARCHAR(100), -- German name
+  code VARCHAR(10) UNIQUE,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Provinces (middle level)
+CREATE TABLE provinces (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  name_nl VARCHAR(100),
+  name_fr VARCHAR(100),
+  region_id INT NOT NULL REFERENCES regions(id),
+  code VARCHAR(10) UNIQUE,
+  geometry GEOMETRY(MultiPolygon, 4326),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Municipalities (lowest level)
+CREATE TABLE municipalities (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(100) NOT NULL,
+  name_nl VARCHAR(100),
+  name_fr VARCHAR(100),
+  name_de VARCHAR(100),
+  province_id INT NOT NULL REFERENCES provinces(id),
+  nis_code VARCHAR(10) UNIQUE, -- Official Belgian municipality code
+  postal_codes TEXT[], -- Array of postal codes
+  geometry GEOMETRY(MultiPolygon, 4326),
+  area_km2 NUMERIC(10, 2),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Spatial indexes for performance
+CREATE INDEX idx_provinces_geom ON provinces USING GIST(geometry);
+CREATE INDEX idx_municipalities_geom ON municipalities USING GIST(geometry);
+
+-- ============================================
+-- METRICS SYSTEM (Flexible Design)
+-- ============================================
+
+-- Metric definitions (metadata about what we're measuring)
+CREATE TABLE metric_definitions (
+  id SERIAL PRIMARY KEY,
+  metric_key VARCHAR(50) NOT NULL UNIQUE, -- e.g., 'population_density'
+  name VARCHAR(100) NOT NULL,
+  description TEXT,
+  unit VARCHAR(50), -- e.g., 'people/km²', 'μg/m³', '%'
+  category VARCHAR(50), -- e.g., 'demographics', 'environment', 'health'
+  data_type VARCHAR(20) DEFAULT 'numeric', -- 'numeric', 'text', 'boolean'
+  aggregation_method VARCHAR(20), -- 'sum', 'avg', 'median', 'last'
+  source VARCHAR(200), -- Data source URL or reference
+  update_frequency VARCHAR(50), -- 'annual', 'monthly', 'daily'
+  is_active BOOLEAN DEFAULT true,
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+-- Time-series metric values
+CREATE TABLE metric_values (
+  id SERIAL PRIMARY KEY,
+  municipality_id INT NOT NULL REFERENCES municipalities(id),
+  metric_id INT NOT NULL REFERENCES metric_definitions(id),
+  value NUMERIC,
+  value_text TEXT, -- For non-numeric metrics
+  date DATE NOT NULL,
+  year INT GENERATED ALWAYS AS (EXTRACT(YEAR FROM date)) STORED,
+  quarter INT GENERATED ALWAYS AS (EXTRACT(QUARTER FROM date)) STORED,
+  metadata JSONB, -- Flexible field for additional context
+  source_reference VARCHAR(200),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  
+  -- Ensure one value per municipality per metric per date
+  UNIQUE(municipality_id, metric_id, date)
+);
+
+-- Indexes for fast queries
+CREATE INDEX idx_metric_values_municipality ON metric_values(municipality_id);
+CREATE INDEX idx_metric_values_metric ON metric_values(metric_id);
+CREATE INDEX idx_metric_values_date ON metric_values(date);
+CREATE INDEX idx_metric_values_year ON metric_values(year);
+CREATE INDEX idx_metric_values_metadata ON metric_values USING GIN(metadata);
+
+-- ============================================
+-- AGGREGATED VIEWS (for performance)
+-- ============================================
+
+-- Latest values per municipality/metric (for dashboard)
+CREATE MATERIALIZED VIEW latest_metric_values AS
+SELECT DISTINCT ON (municipality_id, metric_id)
+  municipality_id,
+  metric_id,
+  value,
+  value_text,
+  date,
+  year
+FROM metric_values
+ORDER BY municipality_id, metric_id, date DESC;
+
+CREATE INDEX idx_latest_metrics ON latest_metric_values(municipality_id, metric_id);
+
+-- Province-level aggregations
+CREATE MATERIALIZED VIEW province_metrics AS
+SELECT 
+  p.id as province_id,
+  mv.metric_id,
+  mv.date,
+  AVG(mv.value) as avg_value,
+  SUM(mv.value) as sum_value,
+  MIN(mv.value) as min_value,
+  MAX(mv.value) as max_value,
+  COUNT(*) as municipality_count
+FROM provinces p
+JOIN municipalities m ON m.province_id = p.id
+JOIN metric_values mv ON mv.municipality_id = m.id
+GROUP BY p.id, mv.metric_id, mv.date;
+
+CREATE INDEX idx_province_metrics ON province_metrics(province_id, metric_id, date);
+
+-- Region-level aggregations
+CREATE MATERIALIZED VIEW region_metrics AS
+SELECT 
+  r.id as region_id,
+  mv.metric_id,
+  mv.date,
+  AVG(mv.value) as avg_value,
+  SUM(mv.value) as sum_value,
+  MIN(mv.value) as min_value,
+  MAX(mv.value) as max_value,
+  COUNT(*) as municipality_count
+FROM regions r
+JOIN provinces p ON p.region_id = r.id
+JOIN municipalities m ON m.province_id = p.id
+JOIN metric_values mv ON mv.municipality_id = m.id
+GROUP BY r.id, mv.metric_id, mv.date;
+
+CREATE INDEX idx_region_metrics ON region_metrics(region_id, metric_id, date);
+
+-- ============================================
+-- HELPER FUNCTIONS
+-- ============================================
+
+-- Function to refresh all materialized views
+CREATE OR REPLACE FUNCTION refresh_all_metric_views()
+RETURNS void AS $$
+BEGIN
+  REFRESH MATERIALIZED VIEW CONCURRENTLY latest_metric_values;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY province_metrics;
+  REFRESH MATERIALIZED VIEW CONCURRENTLY region_metrics;
+END;
+$$ LANGUAGE plpgsql;
+
+-- ============================================
+-- INITIAL DATA SETUP
+-- ============================================
+
+-- Insert Belgian regions
+INSERT INTO regions (name, name_nl, name_fr, code) VALUES
+  ('Flanders', 'Vlaanderen', 'Flandre', 'VLG'),
+  ('Wallonia', 'Wallonië', 'Wallonie', 'WAL'),
+  ('Brussels', 'Brussels', 'Bruxelles', 'BRU');
+
+-- Insert population density metric definition
+INSERT INTO metric_definitions (
+  metric_key, 
+  name, 
+  description, 
+  unit, 
+  category, 
+  aggregation_method,
+  source,
+  update_frequency
+) VALUES (
+  'population_density',
+  'Population Density',
+  'Number of inhabitants per square kilometer',
+  'people/km²',
+  'demographics',
+  'avg',
+  'Statbel - Belgian Statistical Office',
+  'annual'
+);
