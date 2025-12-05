@@ -190,3 +190,125 @@ get_municipality_metric <- function(conn, municipality_id) {
   )
   dbGetQuery(conn, query)
 }
+
+# ==============================================================================
+# NAME FREQUENCY QUERIES
+# ==============================================================================
+
+# Get top names for a municipality
+get_municipality_top_names <- function(conn, municipality_id, top_n = 5) {
+  query <- sprintf(
+    "SELECT name, frequency, gender, rank
+     FROM top_names_per_municipality
+     WHERE municipality_id = %d AND rank <= %d AND year = 2025
+     ORDER BY gender, rank",
+    as.integer(municipality_id),
+    as.integer(top_n)
+  )
+  dbGetQuery(conn, query)
+}
+
+# Get top names for a province (aggregated)
+get_province_top_names <- function(conn, province_id, top_n = 5) {
+  query <- sprintf(
+    "SELECT 
+       nf.name,
+       nf.gender,
+       SUM(nf.frequency) as total_frequency,
+       COUNT(DISTINCT nf.municipality_id) as municipality_count
+     FROM name_frequencies nf
+     JOIN municipalities m ON nf.municipality_id = m.id
+     WHERE m.province_id = %d AND nf.year = 2025
+     GROUP BY nf.name, nf.gender
+     ORDER BY nf.gender, total_frequency DESC",
+    as.integer(province_id)
+  )
+  
+  result <- dbGetQuery(conn, query)
+  
+  # Get top N for each gender
+  male <- result[result$gender == 'M', ][1:min(top_n, sum(result$gender == 'M')), ]
+  female <- result[result$gender == 'F', ][1:min(top_n, sum(result$gender == 'F')), ]
+  
+  rbind(male, female)
+}
+
+# Get top names for a region (aggregated)
+get_region_top_names <- function(conn, region_id, top_n = 5) {
+  query <- sprintf(
+    "SELECT 
+       nf.name,
+       nf.gender,
+       SUM(nf.frequency) as total_frequency,
+       COUNT(DISTINCT nf.municipality_id) as municipality_count
+     FROM name_frequencies nf
+     JOIN municipalities m ON nf.municipality_id = m.id
+     JOIN provinces p ON m.province_id = p.id
+     WHERE p.region_id = %d AND nf.year = 2025
+     GROUP BY nf.name, nf.gender
+     ORDER BY nf.gender, total_frequency DESC",
+    as.integer(region_id)
+  )
+  
+  result <- dbGetQuery(conn, query)
+  
+  # Get top N for each gender
+  male <- result[result$gender == 'M', ][1:min(top_n, sum(result$gender == 'M')), ]
+  female <- result[result$gender == 'F', ][1:min(top_n, sum(result$gender == 'F')), ]
+  
+  rbind(male, female)
+}
+
+# Get name diversity for a municipality
+get_municipality_name_diversity <- function(conn, municipality_id) {
+  query <- sprintf(
+    "SELECT 
+       gender,
+       unique_names,
+       total_frequency,
+       top_name_frequency,
+       top_name_percentage
+     FROM municipality_name_diversity
+     WHERE municipality_id = %d AND year = 2025
+     ORDER BY gender",
+    as.integer(municipality_id)
+  )
+  dbGetQuery(conn, query)
+}
+
+# Get name diversity for province (aggregated)
+get_province_name_diversity <- function(conn, province_id) {
+  query <- sprintf(
+    "SELECT 
+       nf.gender,
+       COUNT(DISTINCT nf.name) as unique_names,
+       SUM(nf.frequency) as total_frequency,
+       COUNT(DISTINCT nf.municipality_id) as municipality_count
+     FROM name_frequencies nf
+     JOIN municipalities m ON nf.municipality_id = m.id
+     WHERE m.province_id = %d AND nf.year = 2025
+     GROUP BY nf.gender
+     ORDER BY nf.gender",
+    as.integer(province_id)
+  )
+  dbGetQuery(conn, query)
+}
+
+# Get name diversity for region (aggregated)
+get_region_name_diversity <- function(conn, region_id) {
+  query <- sprintf(
+    "SELECT 
+       nf.gender,
+       COUNT(DISTINCT nf.name) as unique_names,
+       SUM(nf.frequency) as total_frequency,
+       COUNT(DISTINCT nf.municipality_id) as municipality_count
+     FROM name_frequencies nf
+     JOIN municipalities m ON nf.municipality_id = m.id
+     JOIN provinces p ON m.province_id = p.id
+     WHERE p.region_id = %d AND nf.year = 2025
+     GROUP BY nf.gender
+     ORDER BY nf.gender",
+    as.integer(region_id)
+  )
+  dbGetQuery(conn, query)
+}

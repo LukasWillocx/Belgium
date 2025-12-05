@@ -348,92 +348,321 @@ server <- function(input, output, session) {
     
     if (selected$level == "region") {
       metric_data <- get_region_metric(conn, selected$id)
+      name_data <- get_region_top_names(conn, selected$id, top_n = 5)
+      diversity_data <- get_region_name_diversity(conn, selected$id)
       
-      if (nrow(metric_data) > 0) {
-        tagList(
-          tags$div(
-            class = "metric-card",
-            tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
-            tags$div(class = "metric-label", paste0("Average ", metric_data$unit[1]))
-          ),
-          tags$div(
-            class = "stats-grid",
+      tagList(
+        # Population Density
+        if (nrow(metric_data) > 0) {
+          tagList(
+            tags$h4("Population Density", style = "margin-top: 0;"),
             tags$div(
-              class = "stat-item",
-              tags$div(class = "stat-value", sprintf("%.1f", metric_data$min_value[1])),
-              tags$div(class = "stat-label", "Minimum")
+              class = "metric-card",
+              tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
+              tags$div(class = "metric-label", paste0("Average ", metric_data$unit[1]))
             ),
             tags$div(
-              class = "stat-item",
-              tags$div(class = "stat-value", sprintf("%.1f", metric_data$max_value[1])),
-              tags$div(class = "stat-label", "Maximum")
-            )
-          ),
-          tags$div(
-            class = "info-text",
-            tags$strong("Region: "), metric_data$region_name[1], tags$br(),
-            tags$strong("Municipalities: "), metric_data$municipality_count[1], tags$br(),
-            tags$strong("Date: "), as.character(metric_data$date[1])
+              class = "stats-grid",
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", sprintf("%.1f", metric_data$min_value[1])),
+                tags$div(class = "stat-label", "Minimum")
+              ),
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", sprintf("%.1f", metric_data$max_value[1])),
+                tags$div(class = "stat-label", "Maximum")
+              )
+            ),
+            tags$hr()
           )
+        },
+        
+        # Top Names
+        if (nrow(name_data) > 0) {
+          male_names <- name_data[name_data$gender == 'M', ]
+          female_names <- name_data[name_data$gender == 'F', ]
+          
+          tagList(
+            tags$h4("Most Popular Names (2025)"),
+            tags$div(
+              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
+              # Male names
+              tags$div(
+                tags$h5("👨 Male", style = "margin-top: 0; color: #3498db;"),
+                tags$ol(
+                  style = "margin: 0; padding-left: 20px;",
+                  lapply(1:nrow(male_names), function(i) {
+                    tags$li(
+                      tags$strong(male_names$name[i]),
+                      tags$br(),
+                      tags$small(
+                        sprintf("%s people", format(male_names$total_frequency[i], big.mark = ","))
+                      )
+                    )
+                  })
+                )
+              ),
+              # Female names
+              tags$div(
+                tags$h5("👩 Female", style = "margin-top: 0; color: #e74c3c;"),
+                tags$ol(
+                  style = "margin: 0; padding-left: 20px;",
+                  lapply(1:nrow(female_names), function(i) {
+                    tags$li(
+                      tags$strong(female_names$name[i]),
+                      tags$br(),
+                      tags$small(
+                        sprintf("%s people", format(female_names$total_frequency[i], big.mark = ","))
+                      )
+                    )
+                  })
+                )
+              )
+            ),
+            tags$hr()
+          )
+        },
+        
+        # Name Diversity
+        if (nrow(diversity_data) > 0) {
+          tagList(
+            tags$h4("Name Diversity"),
+            tags$div(
+              class = "stats-grid",
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", format(diversity_data$unique_names[diversity_data$gender == 'M'], big.mark = ",")),
+                tags$div(class = "stat-label", "Unique Male Names")
+              ),
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", format(diversity_data$unique_names[diversity_data$gender == 'F'], big.mark = ",")),
+                tags$div(class = "stat-label", "Unique Female Names")
+              )
+            )
+          )
+        },
+        
+        # Region Info
+        tags$div(
+          class = "info-text",
+          style = "margin-top: 15px;",
+          tags$strong("Region: "), if(nrow(metric_data) > 0) metric_data$region_name[1] else "",
+          tags$br(),
+          tags$strong("Municipalities: "), if(nrow(metric_data) > 0) metric_data$municipality_count[1] else ""
         )
-      } else {
-        tags$p("No data available", class = "info-text")
-      }
+      )
       
     } else if (selected$level == "province") {
       metric_data <- get_province_metric(conn, selected$id)
+      name_data <- get_province_top_names(conn, selected$id, top_n = 5)
+      diversity_data <- get_province_name_diversity(conn, selected$id)
       
-      if (nrow(metric_data) > 0) {
-        tagList(
-          tags$div(
-            class = "metric-card",
-            tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
-            tags$div(class = "metric-label", paste0("Average ", metric_data$unit[1]))
-          ),
-          tags$div(
-            class = "stats-grid",
+      tagList(
+        # Population Density
+        if (nrow(metric_data) > 0) {
+          tagList(
+            tags$h4("Population Density", style = "margin-top: 0;"),
             tags$div(
-              class = "stat-item",
-              tags$div(class = "stat-value", sprintf("%.1f", metric_data$min_value[1])),
-              tags$div(class = "stat-label", "Minimum")
+              class = "metric-card",
+              tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
+              tags$div(class = "metric-label", paste0("Average ", metric_data$unit[1]))
             ),
             tags$div(
-              class = "stat-item",
-              tags$div(class = "stat-value", sprintf("%.1f", metric_data$max_value[1])),
-              tags$div(class = "stat-label", "Maximum")
-            )
-          ),
-          tags$div(
-            class = "info-text",
-            tags$strong("Province: "), metric_data$province_name[1], tags$br(),
-            tags$strong("Municipalities: "), metric_data$municipality_count[1], tags$br(),
-            tags$strong("Date: "), as.character(metric_data$date[1])
+              class = "stats-grid",
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", sprintf("%.1f", metric_data$min_value[1])),
+                tags$div(class = "stat-label", "Minimum")
+              ),
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", sprintf("%.1f", metric_data$max_value[1])),
+                tags$div(class = "stat-label", "Maximum")
+              )
+            ),
+            tags$hr()
           )
+        },
+        
+        # Top Names
+        if (nrow(name_data) > 0) {
+          male_names <- name_data[name_data$gender == 'M', ]
+          female_names <- name_data[name_data$gender == 'F', ]
+          
+          tagList(
+            tags$h4("Most Popular Names (2025)"),
+            tags$div(
+              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
+              # Male names
+              tags$div(
+                tags$h5("👨 Male", style = "margin-top: 0; color: #3498db;"),
+                tags$ol(
+                  style = "margin: 0; padding-left: 20px;",
+                  lapply(1:nrow(male_names), function(i) {
+                    tags$li(
+                      tags$strong(male_names$name[i]),
+                      tags$br(),
+                      tags$small(
+                        sprintf("%s people", format(male_names$total_frequency[i], big.mark = ","))
+                      )
+                    )
+                  })
+                )
+              ),
+              # Female names
+              tags$div(
+                tags$h5("👩 Female", style = "margin-top: 0; color: #e74c3c;"),
+                tags$ol(
+                  style = "margin: 0; padding-left: 20px;",
+                  lapply(1:nrow(female_names), function(i) {
+                    tags$li(
+                      tags$strong(female_names$name[i]),
+                      tags$br(),
+                      tags$small(
+                        sprintf("%s people", format(female_names$total_frequency[i], big.mark = ","))
+                      )
+                    )
+                  })
+                )
+              )
+            ),
+            tags$hr()
+          )
+        },
+        
+        # Name Diversity
+        if (nrow(diversity_data) > 0) {
+          tagList(
+            tags$h4("Name Diversity"),
+            tags$div(
+              class = "stats-grid",
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", format(diversity_data$unique_names[diversity_data$gender == 'M'], big.mark = ",")),
+                tags$div(class = "stat-label", "Unique Male Names")
+              ),
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", format(diversity_data$unique_names[diversity_data$gender == 'F'], big.mark = ",")),
+                tags$div(class = "stat-label", "Unique Female Names")
+              )
+            )
+          )
+        },
+        
+        # Province Info
+        tags$div(
+          class = "info-text",
+          style = "margin-top: 15px;",
+          tags$strong("Province: "), if(nrow(metric_data) > 0) metric_data$province_name[1] else "",
+          tags$br(),
+          tags$strong("Municipalities: "), if(nrow(metric_data) > 0) metric_data$municipality_count[1] else ""
         )
-      } else {
-        tags$p("No data available", class = "info-text")
-      }
+      )
       
     } else if (selected$level == "municipality") {
       metric_data <- get_municipality_metric(conn, selected$id)
+      name_data <- get_municipality_top_names(conn, selected$id, top_n = 5)
+      diversity_data <- get_municipality_name_diversity(conn, selected$id)
       
-      if (nrow(metric_data) > 0) {
-        tagList(
-          tags$div(
-            class = "metric-card",
-            tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
-            tags$div(class = "metric-label", paste0(metric_data$unit[1]))
-          ),
-          tags$div(
-            class = "info-text",
-            tags$strong("Location: "), metric_data$municipality_name[1], tags$br(),
-            tags$strong("Metric: "), metric_data$metric_name[1], tags$br(),
-            tags$strong("Date: "), as.character(metric_data$date[1])
+      tagList(
+        # Population Density
+        if (nrow(metric_data) > 0) {
+          tagList(
+            tags$h4("Population Density", style = "margin-top: 0;"),
+            tags$div(
+              class = "metric-card",
+              tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
+              tags$div(class = "metric-label", paste0(metric_data$unit[1]))
+            ),
+            tags$hr()
           )
+        },
+        
+        # Top Names
+        if (nrow(name_data) > 0) {
+          male_names <- name_data[name_data$gender == 'M', ]
+          female_names <- name_data[name_data$gender == 'F', ]
+          
+          tagList(
+            tags$h4("Most Popular Names (2025)"),
+            tags$div(
+              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
+              # Male names
+              tags$div(
+                tags$h5("👨 Male", style = "margin-top: 0; color: #3498db;"),
+                tags$ol(
+                  style = "margin: 0; padding-left: 20px;",
+                  lapply(1:nrow(male_names), function(i) {
+                    tags$li(
+                      tags$strong(male_names$name[i]),
+                      tags$br(),
+                      tags$small(sprintf("%d people", male_names$frequency[i]))
+                    )
+                  })
+                )
+              ),
+              # Female names
+              tags$div(
+                tags$h5("👩 Female", style = "margin-top: 0; color: #e74c3c;"),
+                tags$ol(
+                  style = "margin: 0; padding-left: 20px;",
+                  lapply(1:nrow(female_names), function(i) {
+                    tags$li(
+                      tags$strong(female_names$name[i]),
+                      tags$br(),
+                      tags$small(sprintf("%d people", female_names$frequency[i]))
+                    )
+                  })
+                )
+              )
+            ),
+            tags$hr()
+          )
+        },
+        
+        # Name Diversity
+        if (nrow(diversity_data) > 0) {
+          tagList(
+            tags$h4("Name Diversity"),
+            tags$div(
+              class = "stats-grid",
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", diversity_data$unique_names[diversity_data$gender == 'M']),
+                tags$div(class = "stat-label", "Unique Male Names")
+              ),
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", diversity_data$unique_names[diversity_data$gender == 'F']),
+                tags$div(class = "stat-label", "Unique Female Names")
+              )
+            ),
+            tags$div(
+              class = "stats-grid",
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", sprintf("%.1f%%", diversity_data$top_name_percentage[diversity_data$gender == 'M'])),
+                tags$div(class = "stat-label", "Top Male Name %")
+              ),
+              tags$div(
+                class = "stat-item",
+                tags$div(class = "stat-value", sprintf("%.1f%%", diversity_data$top_name_percentage[diversity_data$gender == 'F'])),
+                tags$div(class = "stat-label", "Top Female Name %")
+              )
+            )
+          )
+        },
+        
+        # Municipality Info
+        tags$div(
+          class = "info-text",
+          style = "margin-top: 15px;",
+          tags$strong("Location: "), if(nrow(metric_data) > 0) metric_data$municipality_name[1] else ""
         )
-      } else {
-        tags$p("No data available", class = "info-text")
-      }
+      )
     }
   })
 }
