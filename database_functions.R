@@ -91,30 +91,43 @@ get_area_geometry <- function(conn, level, id) {
   st_sf(id = result$id, name = result$name, geometry = geom)
 }
 
+# OPTIMIZED: Uses spatial index and simplified geometries for faster loading
 get_municipalities_with_metrics <- function(conn, province_id = NULL, region_id = NULL) {
   if (!is.null(province_id) && province_id != "") {
     query <- sprintf(
-      "SELECT m.id, m.name, ST_AsText(m.geometry) as wkt, mv.value
+      "SELECT m.id, m.name, 
+              COALESCE(ST_AsText(m.geometry_simplified), ST_AsText(m.geometry)) as wkt, 
+              mv.value
        FROM municipalities m
        LEFT JOIN metric_values mv ON mv.municipality_id = m.id
        LEFT JOIN metric_definitions md ON mv.metric_id = md.id
-       WHERE m.province_id = %d AND md.metric_key = 'population_density'
+       WHERE m.province_id = %d AND (md.metric_key = 'population_density' OR md.metric_key IS NULL)
        ORDER BY m.name",
       as.integer(province_id)
     )
   } else if (!is.null(region_id) && region_id != "") {
     query <- sprintf(
-      "SELECT m.id, m.name, ST_AsText(m.geometry) as wkt, mv.value
+      "SELECT m.id, m.name, 
+              COALESCE(ST_AsText(m.geometry_simplified), ST_AsText(m.geometry)) as wkt, 
+              mv.value
        FROM municipalities m
        JOIN provinces p ON m.province_id = p.id
        LEFT JOIN metric_values mv ON mv.municipality_id = m.id
        LEFT JOIN metric_definitions md ON mv.metric_id = md.id
-       WHERE p.region_id = %d AND md.metric_key = 'population_density'
+       WHERE p.region_id = %d AND (md.metric_key = 'population_density' OR md.metric_key IS NULL)
        ORDER BY m.name",
       as.integer(region_id)
     )
   } else {
-    return(NULL)
+    # Return ALL municipalities when no filter specified - uses simplified geometry for speed
+    query <- "SELECT m.id, m.name, 
+              COALESCE(ST_AsText(m.geometry_simplified), ST_AsText(m.geometry)) as wkt, 
+              mv.value
+       FROM municipalities m
+       LEFT JOIN metric_values mv ON mv.municipality_id = m.id
+       LEFT JOIN metric_definitions md ON mv.metric_id = md.id
+       WHERE md.metric_key = 'population_density' OR md.metric_key IS NULL
+       ORDER BY m.name"
   }
   
   result <- dbGetQuery(conn, query)

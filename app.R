@@ -67,13 +67,14 @@ ui <- fluidPage(
   ),
   
   # Right Panel
-  conditionalPanel(
-    condition = "output.show_metrics",
-    tags$div(
-      class = "right-panel",
-      id = "rightPanel",
-      tags$button(class = "close-sidebar", id = "closeRightPanel", "×"),
-      tags$div(class = "panel-title", "Metrics"),
+  tags$div(
+    class = "right-panel",
+    id = "rightPanel",
+    tags$button(class = "close-sidebar", id = "closeRightPanel", "×"),
+    tags$div(class = "panel-title", "Information"),
+    
+    conditionalPanel(
+      condition = "output.show_metrics",
       uiOutput("metrics_display")
     )
   ),
@@ -126,6 +127,9 @@ server <- function(input, output, session) {
   conn <- get_db_connection()
   onStop(function() { dbDisconnect(conn) })
   
+  # Cache for municipality data to speed up loading
+  municipalities_cache <- reactiveVal(NULL)
+  
   selected <- reactiveValues(
     level = NULL,
     id = NULL,
@@ -137,6 +141,16 @@ server <- function(input, output, session) {
   
   observeEvent(input$darkModeState, {
     darkMode(input$darkModeState)
+  })
+  
+  # ===========================================================================
+  # LOAD AND CACHE ALL MUNICIPALITIES ON STARTUP
+  # ===========================================================================
+  
+  observe({
+    if (is.null(municipalities_cache())) {
+      municipalities_cache(get_municipalities_with_metrics(conn))
+    }
   })
   
   # ===========================================================================
@@ -163,9 +177,29 @@ server <- function(input, output, session) {
       selected$id <- NULL
       selected$region_code <- NULL
       
-      leafletProxy("map") %>%
-        clearShapes() %>%
-        setView(lng = 4.5, lat = 50.5, zoom = 8)
+      # Use cached municipalities when deselecting
+      municipalities_geom <- municipalities_cache()
+      
+      if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
+        # Use log scale for better hotspot visualization
+        pal <- colorNumeric(
+          palette = "YlOrRd",
+          domain = c(log10(1), log10(24000)),
+          na.color = "#808080"
+        )
+        
+        leafletProxy("map") %>%
+          clearShapes() %>%
+          addPolygons(
+            data = municipalities_geom,
+            fillColor = ~pal(log10(pmax(value, 1))),
+            fillOpacity = 0.7,
+            color = "white",
+            weight = 1,
+            label = ~paste0(name, ": ", round(value, 1), " people/km²")
+          ) %>%
+          setView(lng = 4.5, lat = 50.5, zoom = 8)
+      }
       
     } else {
       region_data <- dbGetQuery(conn, sprintf(
@@ -177,9 +211,10 @@ server <- function(input, output, session) {
       municipalities_geom <- get_municipalities_with_metrics(conn, region_id = input$region)
       
       if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
+        # Use log scale for better hotspot visualization
         pal <- colorNumeric(
           palette = "YlOrRd",
-          domain = municipalities_geom$value,
+          domain = c(log10(1), log10(24000)),
           na.color = "#808080"
         )
         
@@ -188,7 +223,7 @@ server <- function(input, output, session) {
           clearShapes() %>%
           addPolygons(
             data = municipalities_geom,
-            fillColor = ~pal(value),
+            fillColor = ~pal(log10(pmax(value, 1))),
             fillOpacity = 0.7,
             color = "white",
             weight = 1,
@@ -237,9 +272,10 @@ server <- function(input, output, session) {
       municipalities_geom <- get_municipalities_with_metrics(conn, province_id = input$province)
       
       if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
+        # Use log scale for better hotspot visualization
         pal <- colorNumeric(
           palette = "YlOrRd",
-          domain = municipalities_geom$value,
+          domain = c(log10(1), log10(24000)),
           na.color = "#808080"
         )
         
@@ -248,7 +284,7 @@ server <- function(input, output, session) {
           clearShapes() %>%
           addPolygons(
             data = municipalities_geom,
-            fillColor = ~pal(value),
+            fillColor = ~pal(log10(pmax(value, 1))),
             fillOpacity = 0.7,
             color = "white",
             weight = 1,
@@ -301,9 +337,29 @@ server <- function(input, output, session) {
     shinyjs::hide("provinceGroup")
     shinyjs::hide("municipalityGroup")
     
-    leafletProxy("map") %>%
-      clearShapes() %>%
-      setView(lng = 4.5, lat = 50.5, zoom = 8)
+    # Use cached municipalities
+    municipalities_geom <- municipalities_cache()
+    
+    if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
+      # Use log scale for better hotspot visualization
+      pal <- colorNumeric(
+        palette = "YlOrRd",
+        domain = c(log10(1), log10(24000)),
+        na.color = "#808080"
+      )
+      
+      leafletProxy("map") %>%
+        clearShapes() %>%
+        addPolygons(
+          data = municipalities_geom,
+          fillColor = ~pal(log10(pmax(value, 1))),
+          fillOpacity = 0.7,
+          color = "white",
+          weight = 1,
+          label = ~paste0(name, ": ", round(value, 1), " people/km²")
+        ) %>%
+        setView(lng = 4.5, lat = 50.5, zoom = 8)
+    }
     
     selected$level <- NULL
     selected$id <- NULL
@@ -316,9 +372,45 @@ server <- function(input, output, session) {
   # ===========================================================================
   
   output$map <- renderLeaflet({
-    leaflet() %>%
+    # Load all municipalities on startup and cache them
+    municipalities_geom <- get_municipalities_with_metrics(conn)
+    municipalities_cache(municipalities_geom)
+    
+    # Use log scale (base 10) for better visualization of density hotspots
+    # This prevents Brussels from washing out other areas
+    pal <- colorNumeric(
+      palette = "YlOrRd",
+      domain = c(log10(1), log10(24000)),
+      na.color = "#808080"
+    )
+    
+    map <- leaflet() %>%
       addProviderTiles(providers$CartoDB.Positron) %>%
       setView(lng = 4.5, lat = 50.5, zoom = 8)
+    
+    # Add legend with log scale labels
+    map <- map %>%
+      addLegend(
+        position = "bottomright",
+        colors = c("#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#bd0026", "#800026"),
+        labels = c("1", "10", "50", "100", "500", "1,000", "5,000", "10,000", "24,000"),
+        title = "Population Density<br/>(people/km²)<br/><small>Log scale</small>",
+        opacity = 0.7
+      )
+    
+    if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
+      map <- map %>%
+        addPolygons(
+          data = municipalities_geom,
+          fillColor = ~pal(log10(pmax(value, 1))),  # pmax ensures minimum value of 1 for log
+          fillOpacity = 0.7,
+          color = "white",
+          weight = 1,
+          label = ~paste0(name, ": ", round(value, 1), " people/km²")
+        )
+    }
+    
+    map
   })
   
   # Dark mode map tiles
