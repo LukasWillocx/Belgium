@@ -5,58 +5,10 @@
 library(shiny)
 library(leaflet)
 library(shinyjs)
+library(markdown)
 
 # Source external files
 source("database_functions.R")
-
-# ==============================================================================
-# HELPER FUNCTION FOR RENDERING NAME LISTS WITH SCALED BAR CHARTS
-# ==============================================================================
-
-render_name_list <- function(name_data, gender_type, frequency_col = "total_frequency") {
-  if (nrow(name_data) == 0) return(tags$div())
-  
-  # Calculate max frequency for scaling
-  max_freq <- max(name_data[[frequency_col]], na.rm = TRUE)
-  
-  tags$div(
-    class = "names-section",
-    tags$div(
-      class = "names-list",
-      lapply(1:nrow(name_data), function(i) {
-        freq <- name_data[[frequency_col]][i]
-        # Calculate percentage for bar width
-        bar_width <- (freq / max_freq) * 100
-        
-        tags$div(
-          class = "name-item",
-          tags$div(
-            class = "name-header",
-            tags$span(
-              class = "name-text",
-              paste0(i, ". ", name_data$name[i])
-            ),
-            tags$span(
-              class = "name-count",
-              format(freq, big.mark = ",")
-            )
-          ),
-          tags$div(
-            class = "name-bar-container",
-            tags$div(
-              class = paste("name-bar", tolower(gender_type)),
-              style = if(tolower(gender_type) == "male") {
-                sprintf("width: %.2f%%; background: linear-gradient(90deg, #A7C7E7, #87CEEB) !important;", bar_width)
-              } else {
-                sprintf("width: %.2f%%; background: linear-gradient(90deg, #FFB6D9, #FFC0CB) !important;", bar_width)
-              }
-            )
-          )
-        )
-      })
-    )
-  )
-}
 
 # ==============================================================================
 # UI
@@ -67,7 +19,26 @@ ui <- fluidPage(
   
   # Include custom CSS
   tags$head(
-    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
+    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css?v=6"),
+    tags$style(HTML("
+      .about-modal-content img {
+        max-width: 100%;
+        height: auto;
+        display: block;
+        margin: 15px auto;
+      }
+      .about-modal-content {
+        line-height: 1.6;
+      }
+      .about-modal-content h1 {
+        margin-top: 0;
+      }
+      .about-modal-content h2 {
+        margin-top: 20px;
+        border-bottom: 1px solid #e0e0e0;
+        padding-bottom: 5px;
+      }
+    "))
   ),
   
   tags$button(class = "dark-mode-toggle", id = "darkModeToggle", "🌙"),
@@ -109,6 +80,11 @@ ui <- fluidPage(
     tags$div(
       class = "filter-group",
       actionButton("reset", "Reset Selection", class = "btn-secondary btn-block")
+    ),
+    
+    tags$div(
+      class = "filter-group",
+      actionButton("aboutBtn", "About", class = "btn-info btn-block", icon = icon("info-circle"))
     )
   ),
   
@@ -188,39 +164,41 @@ ui <- fluidPage(
         $('#metricsToggle').addClass('hidden');
       });
       
-      // Top Names Slider - update display immediately without waiting for Shiny
-      function updateSliderVisuals(slider, value) {
-        var percentage = ((value - 1) / 9) * 100;
-        
-        // Update slider background gradient
-        var gradient = 'linear-gradient(to right, #3c8dbc 0%, #3c8dbc ' + percentage + '%, ';
-        if ($('body').hasClass('dark-mode')) {
-          gradient += '#2a2a2a ' + percentage + '%, #2a2a2a 100%)';
-        } else {
-          gradient += '#e0e0e0 ' + percentage + '%, #e0e0e0 100%)';
-        }
-        slider.css('background', gradient);
-      }
-      
-      // Handle slider input - update visuals immediately
-      $(document).on('input', '#topNamesSlider', function() {
-        var value = parseInt($(this).val());
-        updateSliderVisuals($(this), value);
-      });
-      
-      // Handle slider change - send to Shiny only when released
+      // Handle slider change - send to Shiny when value changes
       $(document).on('change', '#topNamesSlider', function() {
         Shiny.setInputValue('topNamesCount', parseInt($(this).val()));
       });
+      
+      // Force solid slider background and override any gradients
+      function forceSliderSolidBackground() {
+        $('#topNamesSlider').css({
+          'background': '#e0e0e0',
+          'background-image': 'none'
+        });
+        if ($('body').hasClass('dark-mode')) {
+          $('#topNamesSlider').css({
+            'background': '#2a2a2a',
+            'background-image': 'none'
+          });
+        }
+      }
       
       // Initialize slider when it appears
       var initSliderInterval = setInterval(function() {
         var slider = $('#topNamesSlider');
         if (slider.length) {
-          updateSliderVisuals(slider, parseInt(slider.val()));
+          forceSliderSolidBackground();
           clearInterval(initSliderInterval);
         }
       }, 100);
+      
+      // Re-apply on dark mode toggle
+      $('#darkModeToggle').on('click', function() {
+        setTimeout(forceSliderSolidBackground, 50);
+      });
+      
+      // Monitor for any changes to slider
+      setInterval(forceSliderSolidBackground, 500);
     });
   "))
 )
@@ -238,7 +216,7 @@ server <- function(input, output, session) {
   municipalities_cache <- reactiveVal(NULL)
   
   selected <- reactiveValues(
-    level = NULL,
+    level = "belgium",  # Start with Belgium view
     id = NULL,
     name = NULL,
     region_code = NULL
@@ -271,9 +249,8 @@ server <- function(input, output, session) {
   
   observe({
     regions <- get_regions(conn)
-    # Capitalize region names properly (first letter uppercase, rest lowercase)
-    regions$name <- paste0(toupper(substr(regions$name, 1, 1)), 
-                           tolower(substr(regions$name, 2, nchar(regions$name))))
+    # Capitalize region names properly
+    regions$name <- sapply(regions$name, capitalize_first)
     choices <- c("Select Region" = "", setNames(regions$id, regions$name))
     updateSelectInput(session, "region", choices = choices, selected = "")
   })
@@ -288,31 +265,15 @@ server <- function(input, output, session) {
       shinyjs::hide("municipalityGroup")
       updateSelectInput(session, "province", choices = c("Select Province" = ""), selected = "")
       updateSelectInput(session, "municipality", choices = c("Select Municipality" = ""), selected = "")
-      selected$level <- NULL
+      selected$level <- "belgium"  # Reset to Belgium view
       selected$id <- NULL
       selected$region_code <- NULL
       
       # Use cached municipalities when deselecting
       municipalities_geom <- municipalities_cache()
-      
       if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
-        # Use log scale for better hotspot visualization
-        pal <- colorNumeric(
-          palette = "YlOrRd",
-          domain = c(log10(1), log10(24000)),
-          na.color = "#808080"
-        )
-        
         leafletProxy("map") %>%
-          clearShapes() %>%
-          addPolygons(
-            data = municipalities_geom,
-            fillColor = ~pal(log10(pmax(value, 1))),
-            fillOpacity = 0.7,
-            color = "white",
-            weight = 1,
-            label = ~paste0(name, ": ", round(value, 1), " people/km²")
-          ) %>%
+          render_municipalities_choropleth(municipalities_geom) %>%
           setView(lng = 4.5, lat = 50.5, zoom = 8)
       }
       
@@ -326,25 +287,9 @@ server <- function(input, output, session) {
       municipalities_geom <- get_municipalities_with_metrics(conn, region_id = input$region)
       
       if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
-        # Use log scale for better hotspot visualization
-        pal <- colorNumeric(
-          palette = "YlOrRd",
-          domain = c(log10(1), log10(24000)),
-          na.color = "#808080"
-        )
-        
         bbox <- st_bbox(municipalities_geom)
         leafletProxy("map") %>%
-          clearShapes() %>%
-          addPolygons(
-            data = municipalities_geom,
-            fillColor = ~pal(log10(pmax(value, 1))),
-            fillOpacity = 0.7,
-            color = "white",
-            weight = 1,
-            label = ~paste0(name, ": ", round(value, 1), " people/km²")
-          ) %>%
-          fitBounds(bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"])
+          render_municipalities_choropleth(municipalities_geom, bbox, fit_bounds = TRUE)
       }
       
       if (selected$region_code == "BRU") {
@@ -387,25 +332,9 @@ server <- function(input, output, session) {
       municipalities_geom <- get_municipalities_with_metrics(conn, province_id = input$province)
       
       if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
-        # Use log scale for better hotspot visualization
-        pal <- colorNumeric(
-          palette = "YlOrRd",
-          domain = c(log10(1), log10(24000)),
-          na.color = "#808080"
-        )
-        
         bbox <- st_bbox(municipalities_geom)
         leafletProxy("map") %>%
-          clearShapes() %>%
-          addPolygons(
-            data = municipalities_geom,
-            fillColor = ~pal(log10(pmax(value, 1))),
-            fillOpacity = 0.7,
-            color = "white",
-            weight = 1,
-            label = ~paste0(name, ": ", round(value, 1), " people/km²")
-          ) %>%
-          fitBounds(bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"])
+          render_municipalities_choropleth(municipalities_geom, bbox, fit_bounds = TRUE)
       }
       
       selected$level <- "province"
@@ -454,32 +383,41 @@ server <- function(input, output, session) {
     
     # Use cached municipalities
     municipalities_geom <- municipalities_cache()
-    
     if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
-      # Use log scale for better hotspot visualization
-      pal <- colorNumeric(
-        palette = "YlOrRd",
-        domain = c(log10(1), log10(24000)),
-        na.color = "#808080"
-      )
-      
       leafletProxy("map") %>%
-        clearShapes() %>%
-        addPolygons(
-          data = municipalities_geom,
-          fillColor = ~pal(log10(pmax(value, 1))),
-          fillOpacity = 0.7,
-          color = "white",
-          weight = 1,
-          label = ~paste0(name, ": ", round(value, 1), " people/km²")
-        ) %>%
+        render_municipalities_choropleth(municipalities_geom) %>%
         setView(lng = 4.5, lat = 50.5, zoom = 8)
     }
     
-    selected$level <- NULL
+    selected$level <- "belgium"  # Reset to Belgium view
     selected$id <- NULL
     selected$name <- NULL
     selected$region_code <- NULL
+  })
+  
+  # ===========================================================================
+  # ABOUT MODAL
+  # ===========================================================================
+  
+  observeEvent(input$aboutBtn, {
+    # Read the markdown file
+    about_content <- tryCatch({
+      if (file.exists("about.md")) {
+        markdownToHTML(file = "about.md", fragment.only = TRUE)
+      } else {
+        "<p>About content not found. Please create an <code>about.md</code> file.</p>"
+      }
+    }, error = function(e) {
+      paste("<p>Error loading about content:</p><pre>", e$message, "</pre>")
+    })
+    
+    showModal(modalDialog(
+      title = "About This Application",
+      tags$div(class = "about-modal-content", HTML(about_content)),
+      easyClose = TRUE,
+      footer = modalButton("Close"),
+      size = "l"
+    ))
   })
   
   # ===========================================================================
@@ -492,12 +430,7 @@ server <- function(input, output, session) {
     municipalities_cache(municipalities_geom)
     
     # Use log scale (base 10) for better visualization of density hotspots
-    # This prevents Brussels from washing out other areas
-    pal <- colorNumeric(
-      palette = "YlOrRd",
-      domain = c(log10(1), log10(24000)),
-      na.color = "#808080"
-    )
+    pal <- get_density_palette()
     
     map <- leaflet() %>%
       addProviderTiles(providers$CartoDB.Positron) %>%
@@ -519,7 +452,7 @@ server <- function(input, output, session) {
       map <- map %>%
         addPolygons(
           data = municipalities_geom,
-          fillColor = ~pal(log10(pmax(value, 1))),  # pmax ensures minimum value of 1 for log
+          fillColor = ~pal(log10(pmax(value, 1))),
           fillOpacity = 0.7,
           color = "white",
           weight = 1,
@@ -553,84 +486,29 @@ server <- function(input, output, session) {
   outputOptions(output, "show_metrics", suspendWhenHidden = FALSE)
   
   output$metrics_display <- renderUI({
-    req(selected$level, selected$id)
+    req(selected$level)
     
     # Get the current top N value
     top_n <- topNamesCount()
     
-    if (selected$level == "region") {
+    if (selected$level == "belgium") {
+      metric_data <- get_belgium_metric(conn)
+      name_data <- get_belgium_top_names(conn, top_n = top_n)
+      
+      tagList(
+        render_density_section(metric_data, show_min_max = TRUE),
+        render_names_section(name_data, top_n, "total_frequency"),
+        render_belgium_info(metric_data)
+      )
+      
+    } else if (selected$level == "region") {
       metric_data <- get_region_metric(conn, selected$id)
       name_data <- get_region_top_names(conn, selected$id, top_n = top_n)
       
       tagList(
-        # Population Density
-        if (nrow(metric_data) > 0) {
-          tagList(
-            tags$h4("Population Density", style = "margin-top: 0;"),
-            tags$div(
-              class = "metric-card",
-              tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
-              tags$div(class = "metric-label", paste0("Average ", metric_data$unit[1]))
-            ),
-            tags$div(
-              class = "stats-grid",
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", sprintf("%.1f", metric_data$min_value[1])),
-                tags$div(class = "stat-label", "Minimum")
-              ),
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", sprintf("%.1f", metric_data$max_value[1])),
-                tags$div(class = "stat-label", "Maximum")
-              )
-            ),
-            tags$hr()
-          )
-        },
-        
-        # Top Names
-        if (nrow(name_data) > 0) {
-          male_names <- name_data[name_data$gender == 'M', ]
-          female_names <- name_data[name_data$gender == 'F', ]
-          
-          tagList(
-            tags$h4("Most Popular Names (2025)"),
-            tags$div(
-              class = "names-slider-container",
-              tags$div(
-                class = "slider-wrapper",
-                tags$input(
-                  type = "range",
-                  class = "names-slider",
-                  id = "topNamesSlider",
-                  min = "1",
-                  max = "10",
-                  value = as.character(top_n),
-                  step = "1"
-                )
-              )
-            ),
-            tags$div(
-              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
-              render_name_list(male_names, "Male", "total_frequency"),
-              render_name_list(female_names, "Female", "total_frequency")
-            ),
-            tags$hr()
-          )
-        },
-        
-        # Region Info
-        tags$div(
-          class = "info-text",
-          style = "margin-top: 15px;",
-          tags$strong("Region: "), if(nrow(metric_data) > 0) {
-            region_name <- metric_data$region_name[1]
-            paste0(toupper(substr(region_name, 1, 1)), tolower(substr(region_name, 2, nchar(region_name))))
-          } else "",
-          tags$br(),
-          tags$strong("Municipalities: "), if(nrow(metric_data) > 0) metric_data$municipality_count[1] else ""
-        )
+        render_density_section(metric_data, show_min_max = TRUE),
+        render_names_section(name_data, top_n, "total_frequency"),
+        render_region_info(metric_data)
       )
       
     } else if (selected$level == "province") {
@@ -638,71 +516,9 @@ server <- function(input, output, session) {
       name_data <- get_province_top_names(conn, selected$id, top_n = top_n)
       
       tagList(
-        # Population Density
-        if (nrow(metric_data) > 0) {
-          tagList(
-            tags$h4("Population Density", style = "margin-top: 0;"),
-            tags$div(
-              class = "metric-card",
-              tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
-              tags$div(class = "metric-label", paste0("Average ", metric_data$unit[1]))
-            ),
-            tags$div(
-              class = "stats-grid",
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", sprintf("%.1f", metric_data$min_value[1])),
-                tags$div(class = "stat-label", "Minimum")
-              ),
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", sprintf("%.1f", metric_data$max_value[1])),
-                tags$div(class = "stat-label", "Maximum")
-              )
-            ),
-            tags$hr()
-          )
-        },
-        
-        # Top Names
-        if (nrow(name_data) > 0) {
-          male_names <- name_data[name_data$gender == 'M', ]
-          female_names <- name_data[name_data$gender == 'F', ]
-          
-          tagList(
-            tags$h4("Most Popular Names (2025)"),
-            tags$div(
-              class = "names-slider-container",
-              tags$div(
-                class = "slider-wrapper",
-                tags$input(
-                  type = "range",
-                  class = "names-slider",
-                  id = "topNamesSlider",
-                  min = "1",
-                  max = "10",
-                  value = as.character(top_n),
-                  step = "1"
-                )
-              )
-            ),
-            tags$div(
-              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
-              render_name_list(male_names, "Male", "total_frequency"),
-              render_name_list(female_names, "Female", "total_frequency")
-            ),
-            tags$hr()
-          )
-        },
-        
-        # Province Info
-        tags$div(
-          class = "info-text",
-          style = "margin-top: 15px;",
-          tags$strong("Province: "), if(nrow(metric_data) > 0) metric_data$province_name[1] else "",
-          tags$br(),
-          tags$strong("Municipalities: "), if(nrow(metric_data) > 0) metric_data$municipality_count[1] else ""
-        )
+        render_density_section(metric_data, show_min_max = TRUE),
+        render_names_section(name_data, top_n, "total_frequency"),
+        render_province_info(metric_data)
       )
       
     } else if (selected$level == "municipality") {
@@ -710,56 +526,9 @@ server <- function(input, output, session) {
       name_data <- get_municipality_top_names(conn, selected$id, top_n = top_n)
       
       tagList(
-        # Population Density
-        if (nrow(metric_data) > 0) {
-          tagList(
-            tags$h4("Population Density", style = "margin-top: 0;"),
-            tags$div(
-              class = "metric-card",
-              tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
-              tags$div(class = "metric-label", paste0(metric_data$unit[1]))
-            ),
-            tags$hr()
-          )
-        },
-        
-        # Top Names
-        if (nrow(name_data) > 0) {
-          male_names <- name_data[name_data$gender == 'M', ]
-          female_names <- name_data[name_data$gender == 'F', ]
-          
-          tagList(
-            tags$h4("Most Popular Names (2025)"),
-            tags$div(
-              class = "names-slider-container",
-              tags$div(
-                class = "slider-wrapper",
-                tags$input(
-                  type = "range",
-                  class = "names-slider",
-                  id = "topNamesSlider",
-                  min = "1",
-                  max = "10",
-                  value = as.character(top_n),
-                  step = "1"
-                )
-              )
-            ),
-            tags$div(
-              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
-              render_name_list(male_names, "Male", "frequency"),
-              render_name_list(female_names, "Female", "frequency")
-            ),
-            tags$hr()
-          )
-        },
-        
-        # Municipality Info
-        tags$div(
-          class = "info-text",
-          style = "margin-top: 15px;",
-          tags$strong("Location: "), if(nrow(metric_data) > 0) metric_data$municipality_name[1] else ""
-        )
+        render_density_section(metric_data, show_min_max = FALSE),
+        render_names_section(name_data, top_n, "frequency"),
+        render_municipality_info(metric_data)
       )
     }
   })
