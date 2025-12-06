@@ -1,5 +1,5 @@
 # ==============================================================================
-# BELGIUM LIVING CONDITIONS MONITOR - MAIN APP
+# BELGIUM - MAIN APP
 # ==============================================================================
 
 library(shiny)
@@ -10,18 +10,64 @@ library(shinyjs)
 source("database_functions.R")
 
 # ==============================================================================
+# HELPER FUNCTION FOR RENDERING NAME LISTS WITH SCALED BAR CHARTS
+# ==============================================================================
+
+render_name_list <- function(name_data, gender_type, frequency_col = "total_frequency") {
+  if (nrow(name_data) == 0) return(tags$div())
+  
+  # Calculate max frequency for scaling
+  max_freq <- max(name_data[[frequency_col]], na.rm = TRUE)
+  
+  tags$div(
+    class = "names-section",
+    tags$div(
+      class = "names-list",
+      lapply(1:nrow(name_data), function(i) {
+        freq <- name_data[[frequency_col]][i]
+        # Calculate percentage for bar width
+        bar_width <- (freq / max_freq) * 100
+        
+        tags$div(
+          class = "name-item",
+          tags$div(
+            class = "name-header",
+            tags$span(
+              class = "name-text",
+              paste0(i, ". ", name_data$name[i])
+            ),
+            tags$span(
+              class = "name-count",
+              format(freq, big.mark = ",")
+            )
+          ),
+          tags$div(
+            class = "name-bar-container",
+            tags$div(
+              class = paste("name-bar", tolower(gender_type)),
+              style = if(tolower(gender_type) == "male") {
+                sprintf("width: %.2f%%; background: linear-gradient(90deg, #A7C7E7, #87CEEB) !important;", bar_width)
+              } else {
+                sprintf("width: %.2f%%; background: linear-gradient(90deg, #FFB6D9, #FFC0CB) !important;", bar_width)
+              }
+            )
+          )
+        )
+      })
+    )
+  )
+}
+
+# ==============================================================================
 # UI
 # ==============================================================================
 
 ui <- fluidPage(
   useShinyjs(),
   
-  # Include custom CSS using htmlDependency
-  htmltools::htmlDependency(
-    name = "custom-styles",
-    version = "1.0",
-    src = "www",
-    stylesheet = "styles.css"
+  # Include custom CSS
+  tags$head(
+    tags$link(rel = "stylesheet", type = "text/css", href = "styles.css")
   ),
   
   tags$button(class = "dark-mode-toggle", id = "darkModeToggle", "🌙"),
@@ -85,13 +131,40 @@ ui <- fluidPage(
   # JavaScript
   tags$script(HTML("
     $(document).ready(function() {
+      // Function to remove legend background
+      function removeLegendBackground() {
+        $('.info.legend, .leaflet-control.legend, div.legend').each(function() {
+          $(this).css({
+            'background': 'transparent !important',
+            'background-color': 'transparent !important',
+            'border': 'none !important',
+            'box-shadow': 'none !important'
+          });
+          $(this).attr('style', $(this).attr('style') + '; background: transparent !important; background-color: transparent !important; border: none !important; box-shadow: none !important;');
+        });
+      }
+      
       // Dark mode toggle
       let darkMode = false;
       $('#darkModeToggle').click(function() {
         darkMode = !darkMode;
         $('body').toggleClass('dark-mode');
         Shiny.setInputValue('darkModeState', darkMode);
+        
+        // Force legend transparency after dark mode toggle
+        setTimeout(removeLegendBackground, 50);
+        setTimeout(removeLegendBackground, 200);
+        setTimeout(removeLegendBackground, 500);
       });
+      
+      // Force legend transparency on load and periodically
+      setTimeout(removeLegendBackground, 100);
+      setTimeout(removeLegendBackground, 500);
+      setTimeout(removeLegendBackground, 1000);
+      setTimeout(removeLegendBackground, 2000);
+      
+      // Monitor for legend changes
+      setInterval(removeLegendBackground, 1000);
       
       // Left panel controls
       $('#closeLeftPanel').click(function() {
@@ -114,6 +187,40 @@ ui <- fluidPage(
         $('#rightPanel').removeClass('closed');
         $('#metricsToggle').addClass('hidden');
       });
+      
+      // Top Names Slider - update display immediately without waiting for Shiny
+      function updateSliderVisuals(slider, value) {
+        var percentage = ((value - 1) / 9) * 100;
+        
+        // Update slider background gradient
+        var gradient = 'linear-gradient(to right, #3c8dbc 0%, #3c8dbc ' + percentage + '%, ';
+        if ($('body').hasClass('dark-mode')) {
+          gradient += '#2a2a2a ' + percentage + '%, #2a2a2a 100%)';
+        } else {
+          gradient += '#e0e0e0 ' + percentage + '%, #e0e0e0 100%)';
+        }
+        slider.css('background', gradient);
+      }
+      
+      // Handle slider input - update visuals immediately
+      $(document).on('input', '#topNamesSlider', function() {
+        var value = parseInt($(this).val());
+        updateSliderVisuals($(this), value);
+      });
+      
+      // Handle slider change - send to Shiny only when released
+      $(document).on('change', '#topNamesSlider', function() {
+        Shiny.setInputValue('topNamesCount', parseInt($(this).val()));
+      });
+      
+      // Initialize slider when it appears
+      var initSliderInterval = setInterval(function() {
+        var slider = $('#topNamesSlider');
+        if (slider.length) {
+          updateSliderVisuals(slider, parseInt(slider.val()));
+          clearInterval(initSliderInterval);
+        }
+      }, 100);
     });
   "))
 )
@@ -138,9 +245,14 @@ server <- function(input, output, session) {
   )
   
   darkMode <- reactiveVal(FALSE)
+  topNamesCount <- reactiveVal(5)
   
   observeEvent(input$darkModeState, {
     darkMode(input$darkModeState)
+  })
+  
+  observeEvent(input$topNamesCount, {
+    topNamesCount(input$topNamesCount)
   })
   
   # ===========================================================================
@@ -159,6 +271,9 @@ server <- function(input, output, session) {
   
   observe({
     regions <- get_regions(conn)
+    # Capitalize region names properly (first letter uppercase, rest lowercase)
+    regions$name <- paste0(toupper(substr(regions$name, 1, 1)), 
+                           tolower(substr(regions$name, 2, nchar(regions$name))))
     choices <- c("Select Region" = "", setNames(regions$id, regions$name))
     updateSelectInput(session, "region", choices = choices, selected = "")
   })
@@ -395,7 +510,9 @@ server <- function(input, output, session) {
         colors = c("#ffffcc", "#ffeda0", "#fed976", "#feb24c", "#fd8d3c", "#fc4e2a", "#e31a1c", "#bd0026", "#800026"),
         labels = c("1", "10", "50", "100", "500", "1,000", "5,000", "10,000", "24,000"),
         title = "Population Density<br/>(people/km²)<br/><small>Log scale</small>",
-        opacity = 0.7
+        opacity = 0.7,
+        className = "legend",
+        layerId = "legend"
       )
     
     if (!is.null(municipalities_geom) && nrow(municipalities_geom) > 0) {
@@ -438,10 +555,12 @@ server <- function(input, output, session) {
   output$metrics_display <- renderUI({
     req(selected$level, selected$id)
     
+    # Get the current top N value
+    top_n <- topNamesCount()
+    
     if (selected$level == "region") {
       metric_data <- get_region_metric(conn, selected$id)
-      name_data <- get_region_top_names(conn, selected$id, top_n = 5)
-      diversity_data <- get_region_name_diversity(conn, selected$id)
+      name_data <- get_region_top_names(conn, selected$id, top_n = top_n)
       
       tagList(
         # Population Density
@@ -478,61 +597,26 @@ server <- function(input, output, session) {
           tagList(
             tags$h4("Most Popular Names (2025)"),
             tags$div(
-              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
-              # Male names
+              class = "names-slider-container",
               tags$div(
-                tags$h5("👨 Male", style = "margin-top: 0; color: #3498db;"),
-                tags$ol(
-                  style = "margin: 0; padding-left: 20px;",
-                  lapply(1:nrow(male_names), function(i) {
-                    tags$li(
-                      tags$strong(male_names$name[i]),
-                      tags$br(),
-                      tags$small(
-                        sprintf("%s people", format(male_names$total_frequency[i], big.mark = ","))
-                      )
-                    )
-                  })
-                )
-              ),
-              # Female names
-              tags$div(
-                tags$h5("👩 Female", style = "margin-top: 0; color: #e74c3c;"),
-                tags$ol(
-                  style = "margin: 0; padding-left: 20px;",
-                  lapply(1:nrow(female_names), function(i) {
-                    tags$li(
-                      tags$strong(female_names$name[i]),
-                      tags$br(),
-                      tags$small(
-                        sprintf("%s people", format(female_names$total_frequency[i], big.mark = ","))
-                      )
-                    )
-                  })
+                class = "slider-wrapper",
+                tags$input(
+                  type = "range",
+                  class = "names-slider",
+                  id = "topNamesSlider",
+                  min = "1",
+                  max = "10",
+                  value = as.character(top_n),
+                  step = "1"
                 )
               )
             ),
-            tags$hr()
-          )
-        },
-        
-        # Name Diversity
-        if (nrow(diversity_data) > 0) {
-          tagList(
-            tags$h4("Name Diversity"),
             tags$div(
-              class = "stats-grid",
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", format(diversity_data$unique_names[diversity_data$gender == 'M'], big.mark = ",")),
-                tags$div(class = "stat-label", "Unique Male Names")
-              ),
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", format(diversity_data$unique_names[diversity_data$gender == 'F'], big.mark = ",")),
-                tags$div(class = "stat-label", "Unique Female Names")
-              )
-            )
+              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
+              render_name_list(male_names, "Male", "total_frequency"),
+              render_name_list(female_names, "Female", "total_frequency")
+            ),
+            tags$hr()
           )
         },
         
@@ -540,7 +624,10 @@ server <- function(input, output, session) {
         tags$div(
           class = "info-text",
           style = "margin-top: 15px;",
-          tags$strong("Region: "), if(nrow(metric_data) > 0) metric_data$region_name[1] else "",
+          tags$strong("Region: "), if(nrow(metric_data) > 0) {
+            region_name <- metric_data$region_name[1]
+            paste0(toupper(substr(region_name, 1, 1)), tolower(substr(region_name, 2, nchar(region_name))))
+          } else "",
           tags$br(),
           tags$strong("Municipalities: "), if(nrow(metric_data) > 0) metric_data$municipality_count[1] else ""
         )
@@ -548,8 +635,7 @@ server <- function(input, output, session) {
       
     } else if (selected$level == "province") {
       metric_data <- get_province_metric(conn, selected$id)
-      name_data <- get_province_top_names(conn, selected$id, top_n = 5)
-      diversity_data <- get_province_name_diversity(conn, selected$id)
+      name_data <- get_province_top_names(conn, selected$id, top_n = top_n)
       
       tagList(
         # Population Density
@@ -586,61 +672,26 @@ server <- function(input, output, session) {
           tagList(
             tags$h4("Most Popular Names (2025)"),
             tags$div(
-              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
-              # Male names
+              class = "names-slider-container",
               tags$div(
-                tags$h5("👨 Male", style = "margin-top: 0; color: #3498db;"),
-                tags$ol(
-                  style = "margin: 0; padding-left: 20px;",
-                  lapply(1:nrow(male_names), function(i) {
-                    tags$li(
-                      tags$strong(male_names$name[i]),
-                      tags$br(),
-                      tags$small(
-                        sprintf("%s people", format(male_names$total_frequency[i], big.mark = ","))
-                      )
-                    )
-                  })
-                )
-              ),
-              # Female names
-              tags$div(
-                tags$h5("👩 Female", style = "margin-top: 0; color: #e74c3c;"),
-                tags$ol(
-                  style = "margin: 0; padding-left: 20px;",
-                  lapply(1:nrow(female_names), function(i) {
-                    tags$li(
-                      tags$strong(female_names$name[i]),
-                      tags$br(),
-                      tags$small(
-                        sprintf("%s people", format(female_names$total_frequency[i], big.mark = ","))
-                      )
-                    )
-                  })
+                class = "slider-wrapper",
+                tags$input(
+                  type = "range",
+                  class = "names-slider",
+                  id = "topNamesSlider",
+                  min = "1",
+                  max = "10",
+                  value = as.character(top_n),
+                  step = "1"
                 )
               )
             ),
-            tags$hr()
-          )
-        },
-        
-        # Name Diversity
-        if (nrow(diversity_data) > 0) {
-          tagList(
-            tags$h4("Name Diversity"),
             tags$div(
-              class = "stats-grid",
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", format(diversity_data$unique_names[diversity_data$gender == 'M'], big.mark = ",")),
-                tags$div(class = "stat-label", "Unique Male Names")
-              ),
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", format(diversity_data$unique_names[diversity_data$gender == 'F'], big.mark = ",")),
-                tags$div(class = "stat-label", "Unique Female Names")
-              )
-            )
+              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
+              render_name_list(male_names, "Male", "total_frequency"),
+              render_name_list(female_names, "Female", "total_frequency")
+            ),
+            tags$hr()
           )
         },
         
@@ -656,8 +707,7 @@ server <- function(input, output, session) {
       
     } else if (selected$level == "municipality") {
       metric_data <- get_municipality_metric(conn, selected$id)
-      name_data <- get_municipality_top_names(conn, selected$id, top_n = 5)
-      diversity_data <- get_municipality_name_diversity(conn, selected$id)
+      name_data <- get_municipality_top_names(conn, selected$id, top_n = top_n)
       
       tagList(
         # Population Density
@@ -681,70 +731,26 @@ server <- function(input, output, session) {
           tagList(
             tags$h4("Most Popular Names (2025)"),
             tags$div(
-              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
-              # Male names
+              class = "names-slider-container",
               tags$div(
-                tags$h5("👨 Male", style = "margin-top: 0; color: #3498db;"),
-                tags$ol(
-                  style = "margin: 0; padding-left: 20px;",
-                  lapply(1:nrow(male_names), function(i) {
-                    tags$li(
-                      tags$strong(male_names$name[i]),
-                      tags$br(),
-                      tags$small(sprintf("%d people", male_names$frequency[i]))
-                    )
-                  })
-                )
-              ),
-              # Female names
-              tags$div(
-                tags$h5("👩 Female", style = "margin-top: 0; color: #e74c3c;"),
-                tags$ol(
-                  style = "margin: 0; padding-left: 20px;",
-                  lapply(1:nrow(female_names), function(i) {
-                    tags$li(
-                      tags$strong(female_names$name[i]),
-                      tags$br(),
-                      tags$small(sprintf("%d people", female_names$frequency[i]))
-                    )
-                  })
+                class = "slider-wrapper",
+                tags$input(
+                  type = "range",
+                  class = "names-slider",
+                  id = "topNamesSlider",
+                  min = "1",
+                  max = "10",
+                  value = as.character(top_n),
+                  step = "1"
                 )
               )
+            ),
+            tags$div(
+              style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
+              render_name_list(male_names, "Male", "frequency"),
+              render_name_list(female_names, "Female", "frequency")
             ),
             tags$hr()
-          )
-        },
-        
-        # Name Diversity
-        if (nrow(diversity_data) > 0) {
-          tagList(
-            tags$h4("Name Diversity"),
-            tags$div(
-              class = "stats-grid",
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", diversity_data$unique_names[diversity_data$gender == 'M']),
-                tags$div(class = "stat-label", "Unique Male Names")
-              ),
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", diversity_data$unique_names[diversity_data$gender == 'F']),
-                tags$div(class = "stat-label", "Unique Female Names")
-              )
-            ),
-            tags$div(
-              class = "stats-grid",
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", sprintf("%.1f%%", diversity_data$top_name_percentage[diversity_data$gender == 'M'])),
-                tags$div(class = "stat-label", "Top Male Name %")
-              ),
-              tags$div(
-                class = "stat-item",
-                tags$div(class = "stat-value", sprintf("%.1f%%", diversity_data$top_name_percentage[diversity_data$gender == 'F'])),
-                tags$div(class = "stat-label", "Top Female Name %")
-              )
-            )
           )
         },
         

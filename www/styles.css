@@ -1,5 +1,5 @@
 /* ==============================================================================
-   BELGIUM LIVING CONDITIONS MONITOR - STYLES
+   BELGIUM - STYLES
    ============================================================================== */
 
 /* Base styles */
@@ -32,6 +32,56 @@ body.dark-mode {
 
 .dark-mode .leaflet-container {
   background-color: #2c2c2c !important;
+}
+
+/* ==============================================================================
+   LEAFLET LEGEND DARK MODE
+   ============================================================================== */
+
+body .leaflet-control.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.8) !important;
+}
+
+body.dark-mode .leaflet-control.leaflet-control-attribution {
+  background: rgba(255, 255, 255, 0.8) !important;
+}
+
+body .info.legend.leaflet-control {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+body.dark-mode .info.legend.leaflet-control {
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+  color: #e0e0e0 !important;
+}
+
+body.dark-mode .leaflet-bar {
+  background: rgba(45, 45, 45, 0.95) !important;
+  border: 2px solid #555 !important;
+}
+
+body.dark-mode .leaflet-bar a {
+  background: rgba(45, 45, 45, 0.95) !important;
+  color: #e0e0e0 !important;
+  border-bottom: 1px solid #555 !important;
+}
+
+body.dark-mode .leaflet-bar a:hover {
+  background: rgba(60, 60, 60, 0.95) !important;
+}
+
+body.dark-mode .leaflet-control-zoom a {
+  background: rgba(45, 45, 45, 0.95) !important;
+  color: #e0e0e0 !important;
+  border-bottom: 1px solid #555 !important;
+}
+
+body.dark-mode .leaflet-control-zoom a:hover {
+  background: rgba(60, 60, 60, 0.95) !important;
 }
 
 /* ==============================================================================
@@ -298,6 +348,10 @@ body.dark-mode {
 
 .dark-mode .metric-card {
   background: #3a3a3a;
+}
+
+.dark-mode .metric-label {
+  color: #b0b0b0;
 }
 
 /* Stats Grid */

@@ -325,3 +325,55 @@ get_region_name_diversity <- function(conn, region_id) {
   )
   dbGetQuery(conn, query)
 }
+
+# ==============================================================================
+# HELPER FUNCTION FOR RENDERING NAME LISTS WITH SCALED BAR CHARTS
+# ==============================================================================
+
+render_name_list <- function(name_data, gender_type, frequency_col = "total_frequency") {
+  if (nrow(name_data) == 0) return(NULL)
+  
+  # Calculate max frequency for scaling
+  max_freq <- max(name_data[[frequency_col]], na.rm = TRUE)
+  
+  tags$div(
+    tags$h5(
+      class = paste("names-section-header", tolower(gender_type)),
+      if(gender_type == "Male") "👨 Male" else "👩 Female"
+    ),
+    tags$div(
+      class = "names-list",
+      lapply(1:nrow(name_data), function(i) {
+        freq <- name_data[[frequency_col]][i]
+        # Calculate percentage for bar width
+        bar_width <- (freq / max_freq) * 100
+        
+        tags$div(
+          class = "name-item",
+          tags$div(
+            class = "name-header",
+            tags$span(
+              class = "name-text",
+              paste0(i, ". ", name_data$name[i])
+            ),
+            tags$span(
+              class = "name-count",
+              if(frequency_col == "frequency") {
+                sprintf("%s", format(freq, big.mark = ","))
+              } else {
+                sprintf("%s people", format(freq, big.mark = ","))
+              }
+            )
+          ),
+          tags$div(
+            class = "name-bar-container",
+            tags$div(
+              class = paste("name-bar", tolower(gender_type)),
+              style = sprintf("width: %.1f%%;", bar_width)
+            )
+          )
+        )
+      })
+    )
+  )
+}
