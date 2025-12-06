@@ -146,23 +146,45 @@ get_municipalities_with_metrics <- function(conn, province_id = NULL, region_id 
 # METRIC QUERIES
 # ==============================================================================
 
+# NEW: Get Belgium-wide aggregate metrics
+get_belgium_metric <- function(conn) {
+  # Calculate weighted average by back-calculating population from density * area
+  query <- "SELECT 
+       'Belgium' as country_name,
+       md.name as metric_name,
+       md.unit,
+       SUM(mv.value * m.area_km2) / NULLIF(SUM(m.area_km2), 0) as value,
+       MIN(mv.value) as min_value,
+       MAX(mv.value) as max_value,
+       COUNT(DISTINCT mv.municipality_id) as municipality_count,
+       MAX(mv.date) as date
+     FROM metric_values mv
+     JOIN metric_definitions md ON mv.metric_id = md.id
+     JOIN municipalities m ON mv.municipality_id = m.id
+     WHERE md.metric_key = 'population_density'
+     GROUP BY md.name, md.unit"
+  
+  dbGetQuery(conn, query)
+}
+
 get_region_metric <- function(conn, region_id) {
   query <- sprintf(
     "SELECT 
        r.name as region_name,
        md.name as metric_name,
        md.unit,
-       rm.avg_value as value,
-       rm.min_value,
-       rm.max_value,
-       rm.municipality_count,
-       rm.date
-     FROM region_metrics rm
-     JOIN regions r ON rm.region_id = r.id
-     JOIN metric_definitions md ON rm.metric_id = md.id
-     WHERE rm.region_id = %d AND md.metric_key = 'population_density'
-     ORDER BY rm.date DESC
-     LIMIT 1",
+       SUM(mv.value * m.area_km2) / NULLIF(SUM(m.area_km2), 0) as value,
+       MIN(mv.value) as min_value,
+       MAX(mv.value) as max_value,
+       COUNT(DISTINCT mv.municipality_id) as municipality_count,
+       MAX(mv.date) as date
+     FROM metric_values mv
+     JOIN metric_definitions md ON mv.metric_id = md.id
+     JOIN municipalities m ON mv.municipality_id = m.id
+     JOIN provinces p ON m.province_id = p.id
+     JOIN regions r ON p.region_id = r.id
+     WHERE r.id = %d AND md.metric_key = 'population_density'
+     GROUP BY r.name, md.name, md.unit",
     as.integer(region_id)
   )
   dbGetQuery(conn, query)
@@ -174,17 +196,17 @@ get_province_metric <- function(conn, province_id) {
        p.name as province_name,
        md.name as metric_name,
        md.unit,
-       pm.avg_value as value,
-       pm.min_value,
-       pm.max_value,
-       pm.municipality_count,
-       pm.date
-     FROM province_metrics pm
-     JOIN provinces p ON pm.province_id = p.id
-     JOIN metric_definitions md ON pm.metric_id = md.id
-     WHERE pm.province_id = %d AND md.metric_key = 'population_density'
-     ORDER BY pm.date DESC
-     LIMIT 1",
+       SUM(mv.value * m.area_km2) / NULLIF(SUM(m.area_km2), 0) as value,
+       MIN(mv.value) as min_value,
+       MAX(mv.value) as max_value,
+       COUNT(DISTINCT mv.municipality_id) as municipality_count,
+       MAX(mv.date) as date
+     FROM metric_values mv
+     JOIN metric_definitions md ON mv.metric_id = md.id
+     JOIN municipalities m ON mv.municipality_id = m.id
+     JOIN provinces p ON m.province_id = p.id
+     WHERE p.id = %d AND md.metric_key = 'population_density'
+     GROUP BY p.name, md.name, md.unit",
     as.integer(province_id)
   )
   dbGetQuery(conn, query)
@@ -207,6 +229,29 @@ get_municipality_metric <- function(conn, municipality_id) {
 # ==============================================================================
 # NAME FREQUENCY QUERIES
 # ==============================================================================
+
+# NEW: Get top names for all of Belgium
+get_belgium_top_names <- function(conn, top_n = 5) {
+  query <- sprintf(
+    "SELECT 
+       nf.name,
+       nf.gender,
+       SUM(nf.frequency) as total_frequency,
+       COUNT(DISTINCT nf.municipality_id) as municipality_count
+     FROM name_frequencies nf
+     WHERE nf.year = 2025
+     GROUP BY nf.name, nf.gender
+     ORDER BY nf.gender, total_frequency DESC"
+  )
+  
+  result <- dbGetQuery(conn, query)
+  
+  # Get top N for each gender
+  male <- result[result$gender == 'M', ][1:min(top_n, sum(result$gender == 'M')), ]
+  female <- result[result$gender == 'F', ][1:min(top_n, sum(result$gender == 'F')), ]
+  
+  rbind(male, female)
+}
 
 # Get top names for a municipality
 get_municipality_top_names <- function(conn, municipality_id, top_n = 5) {
@@ -337,10 +382,6 @@ render_name_list <- function(name_data, gender_type, frequency_col = "total_freq
   max_freq <- max(name_data[[frequency_col]], na.rm = TRUE)
   
   tags$div(
-    tags$h5(
-      class = paste("names-section-header", tolower(gender_type)),
-      if(gender_type == "Male") "👨 Male" else "👩 Female"
-    ),
     tags$div(
       class = "names-list",
       lapply(1:nrow(name_data), function(i) {
@@ -361,7 +402,7 @@ render_name_list <- function(name_data, gender_type, frequency_col = "total_freq
               if(frequency_col == "frequency") {
                 sprintf("%s", format(freq, big.mark = ","))
               } else {
-                sprintf("%s people", format(freq, big.mark = ","))
+                sprintf("%s", format(freq, big.mark = ","))
               }
             )
           ),
@@ -376,4 +417,187 @@ render_name_list <- function(name_data, gender_type, frequency_col = "total_freq
       })
     )
   )
+}
+
+# ==============================================================================
+# MAP RENDERING HELPERS
+# ==============================================================================
+
+# Create color palette for population density (log scale)
+get_density_palette <- function() {
+  colorNumeric(
+    palette = "YlOrRd",
+    domain = c(log10(1), log10(24000)),
+    na.color = "#808080"
+  )
+}
+
+# Render municipalities with density choropleth
+render_municipalities_choropleth <- function(proxy, municipalities_geom, bbox = NULL, fit_bounds = FALSE) {
+  if (is.null(municipalities_geom) || nrow(municipalities_geom) == 0) {
+    return(proxy)
+  }
+  
+  pal <- get_density_palette()
+  
+  proxy <- proxy %>%
+    clearShapes() %>%
+    addPolygons(
+      data = municipalities_geom,
+      fillColor = ~pal(log10(pmax(value, 1))),
+      fillOpacity = 0.7,
+      color = "white",
+      weight = 1,
+      label = ~paste0(name, ": ", round(value, 1), " people/km²")
+    )
+  
+  if (fit_bounds && !is.null(bbox)) {
+    proxy <- proxy %>%
+      fitBounds(bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"])
+  }
+  
+  proxy
+}
+
+# ==============================================================================
+# METRICS PANEL RENDERING HELPERS
+# ==============================================================================
+
+# Render population density section
+render_density_section <- function(metric_data, show_min_max = TRUE) {
+  if (nrow(metric_data) == 0) return(NULL)
+  
+  density_card <- tags$div(
+    class = "metric-card",
+    tags$div(class = "metric-value", sprintf("%.1f", metric_data$value[1])),
+    tags$div(class = "metric-label", paste0(
+      if (show_min_max) "Average " else "", 
+      metric_data$unit[1]
+    ))
+  )
+  
+  if (show_min_max) {
+    tagList(
+      tags$h4("Population Density", style = "margin-top: 0;"),
+      density_card,
+      tags$div(
+        class = "stats-grid",
+        tags$div(
+          class = "stat-item",
+          tags$div(class = "stat-value", sprintf("%.1f", metric_data$min_value[1])),
+          tags$div(class = "stat-label", "Minimum")
+        ),
+        tags$div(
+          class = "stat-item",
+          tags$div(class = "stat-value", sprintf("%.1f", metric_data$max_value[1])),
+          tags$div(class = "stat-label", "Maximum")
+        )
+      ),
+      tags$hr()
+    )
+  } else {
+    tagList(
+      tags$h4("Population Density", style = "margin-top: 0;"),
+      density_card,
+      tags$hr()
+    )
+  }
+}
+
+# Render top names section with slider
+render_names_section <- function(name_data, top_n, frequency_col = "total_frequency") {
+  if (nrow(name_data) == 0) return(NULL)
+  
+  male_names <- name_data[name_data$gender == 'M', ]
+  female_names <- name_data[name_data$gender == 'F', ]
+  
+  tagList(
+    tags$h4("Most Popular Names (2025)"),
+    tags$div(
+      class = "names-slider-container",
+      tags$div(
+        class = "slider-wrapper",
+        tags$input(
+          type = "range",
+          class = "names-slider",
+          id = "topNamesSlider",
+          min = "1",
+          max = "10",
+          value = as.character(top_n),
+          step = "1"
+        )
+      )
+    ),
+    tags$div(
+      style = "display: grid; grid-template-columns: 1fr 1fr; gap: 15px;",
+      render_name_list(male_names, "Male", frequency_col),
+      render_name_list(female_names, "Female", frequency_col)
+    ),
+    tags$hr()
+  )
+}
+
+# NEW: Render Belgium info section
+render_belgium_info <- function(metric_data) {
+  if (nrow(metric_data) == 0) return(NULL)
+  
+  tags$div(
+    class = "info-text",
+    style = "margin-top: 15px;",
+    tags$strong("Country: "), "Belgium",
+    tags$br(),
+    tags$strong("Municipalities: "), metric_data$municipality_count[1]
+  )
+}
+
+# Render region info section
+render_region_info <- function(metric_data) {
+  if (nrow(metric_data) == 0) return(NULL)
+  
+  region_name <- metric_data$region_name[1]
+  capitalized_name <- paste0(
+    toupper(substr(region_name, 1, 1)), 
+    tolower(substr(region_name, 2, nchar(region_name)))
+  )
+  
+  tags$div(
+    class = "info-text",
+    style = "margin-top: 15px;",
+    tags$strong("Region: "), capitalized_name,
+    tags$br(),
+    tags$strong("Municipalities: "), metric_data$municipality_count[1]
+  )
+}
+
+# Render province info section
+render_province_info <- function(metric_data) {
+  if (nrow(metric_data) == 0) return(NULL)
+  
+  tags$div(
+    class = "info-text",
+    style = "margin-top: 15px;",
+    tags$strong("Province: "), metric_data$province_name[1],
+    tags$br(),
+    tags$strong("Municipalities: "), metric_data$municipality_count[1]
+  )
+}
+
+# Render municipality info section
+render_municipality_info <- function(metric_data) {
+  if (nrow(metric_data) == 0) return(NULL)
+  
+  tags$div(
+    class = "info-text",
+    style = "margin-top: 15px;",
+    tags$strong("Location: "), metric_data$municipality_name[1]
+  )
+}
+
+# ==============================================================================
+# UTILITY FUNCTIONS
+# ==============================================================================
+
+# Capitalize first letter of string
+capitalize_first <- function(text) {
+  paste0(toupper(substr(text, 1, 1)), tolower(substr(text, 2, nchar(text))))
 }
