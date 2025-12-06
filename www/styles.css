@@ -1,21 +1,67 @@
 /* ==============================================================================
-   BELGIUM - STYLES
+   BELGIUM APP - OPTIMIZED STYLES 
    ============================================================================== */
 
-/* Base styles */
-body, html {
+/* ==============================================================================
+   COLOR VARIABLES
+   ============================================================================== */
+:root {
+  /* Base Colors */
+  --bg-light: #f5f5f5;
+  --bg-dark: #2c2c2c;
+  --panel-light: rgba(255, 255, 255, 0.97);
+  --panel-dark: rgba(45, 45, 45, 0.97);
+  --text-light: #333;
+  --text-dark: #e0e0e0;
+
+  /* Primary / Accent Colors */
+  --primary: #3c8dbc;
+  --primary-hover: #3c8dbc;
+  --male: #5dade2;
+  --female: #ff69b4;
+
+  /* Metrics & Stats */
+  --metric-bg-light: #f8f9fa;
+  --metric-bg-dark: #3a3a3a;
+  --metric-text: #3c8dbc;
+  --stat-label-light: #666;
+  --stat-label-dark: #b0b0b0;
+
+  /* Names Bars */
+  --bar-male: linear-gradient(90deg, #E6F2FA 0%, #87CEEB 100%);
+  --bar-female: linear-gradient(90deg, #FFE6F0 0%, #FFC0CB 100%);
+  --bar-container-light: #f0f0f0;
+  --bar-container-dark: #2a2a2a;
+
+  /* Slider */
+  --slider-thumb: #3c8dbc;
+  --slider-bg-light: linear-gradient(to right, #cce5f0 0%, #99cae0 40%, #3c8dbc 100%);
+  --slider-bg-dark: linear-gradient(to right, #1f2f3a 0%, #2f5a78 40%, #3c8dbc 100%);
+}
+
+body.dark-mode {
+  --bg: var(--bg-dark);
+  --panel-bg: var(--panel-dark);
+  --text-color: var(--text-dark);
+  --metric-bg: var(--metric-bg-dark);
+  --stat-label: var(--stat-label-dark);
+  --bar-container: var(--bar-container-dark);
+  --slider-bg: var(--slider-bg-dark);
+}
+
+body {
   margin: 0;
   padding: 0;
   height: 100vh;
   overflow: hidden;
-  transition: background-color 0.3s ease;
+  background-color: var(--bg-light);
+  color: var(--text-light);
+  transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-body.dark-mode {
-  background-color: #2c2c2c;
-}
-
-/* Map container */
+/* ==============================================================================
+   MAP
+   ============================================================================== */
 #map {
   position: absolute;
   top: 0;
@@ -26,83 +72,64 @@ body.dark-mode {
 }
 
 .leaflet-container {
-  background-color: #f5f5f5 !important;
+  background-color: var(--bg-light) !important;
   transition: background-color 0.3s ease;
 }
 
-.dark-mode .leaflet-container {
-  background-color: #2c2c2c !important;
+body.dark-mode .leaflet-container {
+  background-color: var(--bg-dark) !important;
 }
 
-/* ==============================================================================
-   LEAFLET LEGEND DARK MODE
-   ============================================================================== */
-
-body .leaflet-control.leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.8) !important;
+/* LEAFLET CONTROLS DARK MODE */
+body.dark-mode .leaflet-bar,
+body.dark-mode .leaflet-bar a,
+body.dark-mode .leaflet-control-zoom a {
+  background: rgba(45, 45, 45, 0.95) !important;
+  color: var(--text-dark) !important;
+  border-color: #555 !important;
 }
 
-body.dark-mode .leaflet-control.leaflet-control-attribution {
-  background: rgba(255, 255, 255, 0.8) !important;
-}
-
-body .info.legend.leaflet-control {
-  background: transparent !important;
-  border: none !important;
-  box-shadow: none !important;
+body.dark-mode .leaflet-bar a:hover,
+body.dark-mode .leaflet-control-zoom a:hover {
+  background: rgba(60, 60, 60, 0.95) !important;
 }
 
 body.dark-mode .info.legend.leaflet-control {
   background: transparent !important;
   border: none !important;
   box-shadow: none !important;
-  color: #e0e0e0 !important;
-}
-
-body.dark-mode .leaflet-bar {
-  background: rgba(45, 45, 45, 0.95) !important;
-  border: 2px solid #555 !important;
-}
-
-body.dark-mode .leaflet-bar a {
-  background: rgba(45, 45, 45, 0.95) !important;
-  color: #e0e0e0 !important;
-  border-bottom: 1px solid #555 !important;
-}
-
-body.dark-mode .leaflet-bar a:hover {
-  background: rgba(60, 60, 60, 0.95) !important;
-}
-
-body.dark-mode .leaflet-control-zoom a {
-  background: rgba(45, 45, 45, 0.95) !important;
-  color: #e0e0e0 !important;
-  border-bottom: 1px solid #555 !important;
-}
-
-body.dark-mode .leaflet-control-zoom a:hover {
-  background: rgba(60, 60, 60, 0.95) !important;
+  color: var(--text-dark) !important;
 }
 
 /* ==============================================================================
    PANELS
    ============================================================================== */
-
-/* Left Panel */
-.left-panel {
+.left-panel,
+.right-panel {
   position: absolute;
   top: 50%;
-  transform: translateY(-50%);
-  left: 15px;
-  width: 320px;
-  max-height: calc(100vh - 100px);
-  background: rgba(255, 255, 255, 0.97);
+  background: var(--panel-light);
+  color: var(--text-light);
   box-shadow: 0 4px 20px rgba(0,0,0,0.15);
   z-index: 1000;
   padding: 20px;
   border-radius: 12px;
   overflow-y: auto;
   transition: transform 0.3s ease, opacity 0.3s ease, background 0.3s ease, color 0.3s ease;
+}
+
+.left-panel {
+  transform: translateY(-50%);
+  left: 15px;
+  width: 320px;
+  max-height: calc(100vh - 100px);
+}
+
+.right-panel {
+  transform: translateY(-50%);
+  right: 15px;
+  width: 400px;
+  max-height: calc(100vh - 100px);
 }
 
 .left-panel.closed {
@@ -110,48 +137,24 @@ body.dark-mode .leaflet-control-zoom a:hover {
   opacity: 0;
 }
 
-.dark-mode .left-panel {
-  background: rgba(45, 45, 45, 0.97);
-  color: #e0e0e0;
-}
-
-/* Right Panel */
-.right-panel {
-  position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  right: 15px;
-  width: 400px;
-  max-height: calc(100vh - 100px);
-  background: rgba(255, 255, 255, 0.97);
-  box-shadow: 0 4px 20px rgba(0,0,0,0.15);
-  z-index: 1000;
-  padding: 20px;
-  border-radius: 12px;
-  overflow-y: auto;
-  transition: transform 0.3s ease, opacity 0.3s ease, background 0.3s ease, color 0.3s ease;
-}
-
 .right-panel.closed {
   transform: translate(100%, -50%);
   opacity: 0;
 }
 
-.dark-mode .right-panel {
-  background: rgba(45, 45, 45, 0.97);
-  color: #e0e0e0;
+body.dark-mode .left-panel,
+body.dark-mode .right-panel {
+  background: var(--panel-dark);
+  color: var(--text-dark);
 }
 
 /* ==============================================================================
    TOGGLE BUTTONS
    ============================================================================== */
-
-/* Sidebar Toggle (Left) */
-.sidebar-toggle {
+.sidebar-toggle,
+.metrics-toggle,
+.dark-mode-toggle {
   position: absolute;
-  top: 50%;
-  transform: translateY(-50%);
-  left: 15px;
   z-index: 1001;
   background: white;
   border: none;
@@ -167,132 +170,86 @@ body.dark-mode .leaflet-control-zoom a:hover {
   transition: all 0.3s ease;
 }
 
-.sidebar-toggle:hover {
-  background: #3c8dbc;
-  color: white;
-  transform: translateY(-50%) scale(1.05);
-}
-
-.sidebar-toggle.hidden {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.dark-mode .sidebar-toggle {
-  background: #3a3a3a;
-  color: #e0e0e0;
-}
-
-.dark-mode .sidebar-toggle:hover {
-  background: #3c8dbc;
-  color: white;
-}
-
-/* Metrics Toggle (Right) */
+.sidebar-toggle,
 .metrics-toggle {
-  position: absolute;
   top: 50%;
   transform: translateY(-50%);
-  right: 15px;
-  z-index: 1001;
-  background: white;
-  border: none;
-  width: 40px;
-  height: 40px;
-  cursor: pointer;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  font-size: 20px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  transition: all 0.3s ease;
 }
 
+.metrics-toggle {
+  right: 15px;
+}
+
+.sidebar-toggle {
+  left: 15px;
+}
+
+.sidebar-toggle:hover,
 .metrics-toggle:hover {
-  background: #3c8dbc;
+  background: var(--primary-hover);
   color: white;
   transform: translateY(-50%) scale(1.05);
 }
 
+.sidebar-toggle.hidden,
 .metrics-toggle.hidden {
   opacity: 0;
   pointer-events: none;
 }
 
-.dark-mode .metrics-toggle {
-  background: #3a3a3a;
-  color: #e0e0e0;
-}
-
-.dark-mode .metrics-toggle:hover {
-  background: #3c8dbc;
-  color: white;
-}
-
-/* Dark Mode Toggle */
 .dark-mode-toggle {
-  position: absolute;
   top: 15px;
   right: 15px;
-  background: white;
-  border: none;
   font-size: 24px;
-  cursor: pointer;
-  width: 40px;
-  height: 40px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 8px;
-  box-shadow: 0 2px 8px rgba(0,0,0,0.2);
-  transition: all 0.2s ease;
-  z-index: 1001;
 }
 
 .dark-mode-toggle:hover {
   transform: scale(1.1);
 }
 
+.dark-mode .sidebar-toggle,
+.dark-mode .metrics-toggle,
 .dark-mode .dark-mode-toggle {
-  background: #3a3a3a;
-  color: #e0e0e0;
+  background: var(--panel-dark);
+  color: var(--text-dark);
+}
+
+.dark-mode .sidebar-toggle:hover,
+.dark-mode .metrics-toggle:hover {
+  background: var(--primary-hover);
+  color: white;
 }
 
 /* ==============================================================================
    PANEL CONTENT
    ============================================================================== */
-
-/* Panel Titles */
 .panel-title {
   font-size: 18px;
   font-weight: bold;
   margin-bottom: 20px;
-  color: #333;
-  border-bottom: 2px solid #3c8dbc;
+  color: var(--text-light);
+  border-bottom: 2px solid var(--primary);
   padding-bottom: 10px;
 }
 
 .dark-mode .panel-title {
-  color: #e0e0e0;
+  color: var(--text-dark);
 }
 
-/* Filter Groups */
 .filter-group {
   margin-bottom: 20px;
 }
 
 .filter-group label {
   font-weight: 600;
-  color: #3c8dbc;
   font-size: 14px;
+  color: var(--primary);
 }
 
 .dark-mode .filter-group label {
-  color: #5dade2;
+  color: var(--male);
 }
 
-/* Close Buttons */
 .close-sidebar {
   position: absolute;
   top: 15px;
@@ -313,21 +270,19 @@ body.dark-mode .leaflet-control-zoom a:hover {
 
 .close-sidebar:hover {
   background: #f0f0f0;
-  color: #333;
+  color: var(--text-light);
 }
 
 .dark-mode .close-sidebar:hover {
   background: #2a2a2a;
-  color: #e0e0e0;
+  color: var(--text-dark);
 }
 
 /* ==============================================================================
    METRICS DISPLAY
    ============================================================================== */
-
-/* Metric Cards */
 .metric-card {
-  background: #f8f9fa;
+  background: var(--metric-bg-light);
   padding: 20px;
   border-radius: 8px;
   margin-bottom: 15px;
@@ -337,24 +292,23 @@ body.dark-mode .leaflet-control-zoom a:hover {
 .metric-value {
   font-size: 36px;
   font-weight: bold;
-  color: #3c8dbc;
+  color: var(--metric-text);
   margin-bottom: 5px;
 }
 
 .metric-label {
   font-size: 14px;
-  color: #666;
+  color: var(--stat-label-light);
 }
 
 .dark-mode .metric-card {
-  background: #3a3a3a;
+  background: var(--metric-bg-dark);
 }
 
 .dark-mode .metric-label {
-  color: #b0b0b0;
+  color: var(--stat-label-dark);
 }
 
-/* Stats Grid */
 .stats-grid {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -363,39 +317,148 @@ body.dark-mode .leaflet-control-zoom a:hover {
 }
 
 .stat-item {
-  background: #f8f9fa;
+  background: var(--metric-bg-light);
   padding: 10px;
   border-radius: 6px;
   text-align: center;
 }
 
 .dark-mode .stat-item {
-  background: #2a2a2a;
+  background: var(--bar-container-dark);
 }
 
 .stat-value {
   font-size: 18px;
   font-weight: bold;
-  color: #3c8dbc;
+  color: var(--metric-text);
 }
 
 .stat-label {
   font-size: 12px;
-  color: #666;
+  color: var(--stat-label-light);
   margin-top: 3px;
 }
 
 .dark-mode .stat-label {
-  color: #b0b0b0;
+  color: var(--stat-label-dark);
 }
 
-/* Info Text */
 .info-text {
-  color: #666;
+  color: var(--stat-label-light);
   font-size: 14px;
   margin-top: 10px;
 }
 
 .dark-mode .info-text {
-  color: #b0b0b0;
+  color: var(--stat-label-dark);
+}
+
+/* ==============================================================================
+   NAMES (POPULAR NAMES SECTION)
+   ============================================================================== */
+.names-section-header {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 15px 0 10px 0;
+  padding-bottom: 8px;
+  border-bottom: 2px solid var(--stat-label-dark);
+}
+
+.names-section-header.male {
+  color: var(--male);
+}
+
+.names-section-header.female {
+  color: var(--female);
+}
+
+.names-list {
+  margin-top: 10px;
+}
+
+.name-item {
+  margin-bottom: 12px;
+}
+
+.name-header {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 4px;
+  font-size: 14px;
+}
+
+.name-text {
+  font-weight: 500;
+  color: var(--text-light);
+}
+
+.dark-mode .name-text {
+  color: var(--text-dark);
+}
+
+.name-count {
+  font-size: 12px;
+  color: var(--stat-label-light);
+}
+
+.dark-mode .name-count {
+  color: var(--stat-label-dark);
+}
+
+.name-bar-container {
+  height: 8px;
+  background: var(--bar-container-light);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.dark-mode .name-bar-container {
+  background: var(--bar-container-dark);
+}
+
+.name-bar {
+  height: 100%;
+  border-radius: 4px;
+  transition: width 0.3s ease;
+}
+
+.name-bar.male {
+  background: var(--bar-male);
+}
+
+.name-bar.female {
+  background: var(--bar-female);
+}
+
+/* Slider */
+.names-slider-container {
+  margin: 15px 0 20px 0;
+}
+
+.slider-wrapper {
+  padding: 0 5px;
+}
+
+.names-slider {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  outline: none;
+  -webkit-appearance: none;
+  background: #e0e0e0 !important;
+  cursor: pointer;
+}
+
+.names-slider::-webkit-slider-thumb,
+.names-slider::-moz-range-thumb {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--slider-thumb);
+  cursor: pointer;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+.dark-mode .names-slider {
+  background: var(--slider-bg-dark) !important;
 }
