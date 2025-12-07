@@ -306,6 +306,7 @@ server <- function(input, output, session) {
         shinyjs::hide("municipalityGroup")
         
         provinces <- get_provinces(conn, input$region)
+        provinces$name <- gsub("^Provincie ", "", provinces$name)
         choices <- c("Select Province" = "", setNames(provinces$id, provinces$name))
         updateSelectInput(session, "province", choices = choices, selected = "")
         updateSelectInput(session, "municipality", choices = c("Select Municipality" = ""), selected = "")
