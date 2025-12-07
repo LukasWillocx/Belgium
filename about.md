@@ -17,7 +17,7 @@ This application visualizes Belgian demographic data from 2025 including:
 
 - [Spatial data of municipalities](https://opendata.brussels.be/explore/dataset/codes-ins-nis-postaux-belgique/export/?disjunctive.postal_code&disjunctive.refnis_code&disjunctive.gemeentenaam&disjunctive.nom_commune&disjunctive.code_ins_region&disjunctive.region_fr&disjunctive.region_nl&disjunctive.region_en) in .GeoJSON format with the WGS84 coordinate system (EPSG:4326) for the administrative boundaries.
 
-All data are linked based on their Belgian NIS codes for 2025. There is one caveat: there are 13 missing entries for geographic data for municipalities that were recently involved in the 2025 mergers. These are the blank spots on the map. Their metrics, population density and popular names are however present in the database and considered for all visualizations.
+All data are linked based on their Belgian NIS codes for 2025. There is one caveat: there are 13 missing entries for geometry data for municipalities that were recently involved in the 2025 mergers. These are the blank spots on the map. Their metrics, population density and popular names are however present in the database and considered for all visualizations. 
 
 ## Data Processing
 
