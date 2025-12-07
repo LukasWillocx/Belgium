@@ -349,18 +349,41 @@ server <- function(input, output, session) {
   
   observeEvent(input$municipality, {
     if (input$municipality != "") {
-      geom <- get_area_geometry(conn, "municipality", input$municipality)
-      if (!is.null(geom)) {
-        bbox <- st_bbox(geom)
+      # Get the specific municipality with its density metric
+      query <- sprintf(
+        "SELECT m.id, m.name, 
+              ST_AsText(m.geometry) as wkt, 
+              mv.value
+       FROM municipalities m
+       LEFT JOIN metric_values mv ON mv.municipality_id = m.id
+       LEFT JOIN metric_definitions md ON mv.metric_id = md.id
+       WHERE m.id = %d AND (md.metric_key = 'population_density' OR md.metric_key IS NULL)
+       LIMIT 1",
+        as.integer(input$municipality)
+      )
+      
+      result <- dbGetQuery(conn, query)
+      
+      if (nrow(result) > 0) {
+        geom <- st_as_sfc(result$wkt, crs = 4326)
+        municipality_geom <- st_sf(
+          id = result$id,
+          name = result$name,
+          value = result$value,
+          geometry = geom
+        )
+        
+        pal <- get_density_palette()
+        bbox <- st_bbox(municipality_geom)
         leafletProxy("map") %>%
           clearShapes() %>%
           addPolygons(
-            data = geom,
-            fillColor = "#e74c3c",
-            fillOpacity = 0.5,
-            color = "#c0392b",
+            data = municipality_geom,
+            fillColor = ~pal(log10(pmax(value, 1))),
+            fillOpacity = 0.7,
+            color = "white",
             weight = 3,
-            label = ~name
+            label = ~paste0(name, ": ", round(value, 1), " people/km²")
           ) %>%
           fitBounds(bbox["xmin"], bbox["ymin"], bbox["xmax"], bbox["ymax"])
         
