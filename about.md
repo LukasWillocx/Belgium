@@ -2,8 +2,8 @@
 
 This application visualizes Belgian demographic data from 2025 including:
 
-- **Population Density**: from national to regional to provincial and finally municipality-level
-- **Popular Names**: most common names by gender, at all available levels
+- **Population Density**: up until municipality-level
+- **Popular Names**: most common names by gender, at all available levels. These are not the names of newborns, but reflects the entirety of the population.
 
 ## Data Sources (2025)
 
