@@ -71,7 +71,7 @@ belgium-demographics-explorer/
 Key tables:
 - `regions` - Three Belgian regions
 - `provinces` - Ten provinces with geometries
-- `municipalities` - 581 municipalities with MultiPolygon geometries
+- `municipalities` - 565 municipalities with MultiPolygon geometries
 - `metric_values` - Population density data
 - `name_frequencies` - Name frequency across the entire population by municipality
 
@@ -83,3 +83,8 @@ Materialized views provide pre-aggregated data at region and province levels for
 - Client-side caching of all municipalities on startup
 - Materialized views for aggregated metrics
 - Spatial indexes on geometry columns
+
+## Hardware requirements
+- Very low
+- Currently runs on a modern low-power quad core mini computer (Minisforum UN100P)
+- Completely single-threaded (no parallelization)
