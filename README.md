@@ -4,11 +4,12 @@ An interactive R Shiny application for exploring population density and name dis
 
 ## Features
 
-- **Interactive choropleth map** showing population density across 581 Belgian municipalities
+- **Interactive choropleth map** showing population density across 565 Belgian municipalities
 - **Hierarchical navigation** through Belgium's administrative structure (Country → Region → Province → Municipality)
 - **Top names** for 2025 with adjustable rankings (1-10 names)
 - **Dark mode** toggle with automatic map tile switching
 - **Responsive panels** that collapse to maximize map viewing area
+- **Modern layout** with full screen interactive mapping and minimalist hover panels
 
 ## How It Works
 
