@@ -17,8 +17,7 @@ This application visualizes Belgian demographic data from 2025 including:
 
 - [Spatial data of municipalities](https://opendata.brussels.be/explore/dataset/codes-ins-nis-postaux-belgique/export/?disjunctive.postal_code&disjunctive.refnis_code&disjunctive.gemeentenaam&disjunctive.nom_commune&disjunctive.code_ins_region&disjunctive.region_fr&disjunctive.region_nl&disjunctive.region_en) in .GeoJSON format with the WGS84 coordinate system (EPSG:4326) for the administrative boundaries.
 
-All data are linked based on their Belgian NIS codes for 2025. There is one caveat: there are 13 missing entries for geometry data for municipalities that were recently involved in the 2025 mergers. These are the blank spots on the map. Their metrics, population density and popular names are however present in the database and considered for all visualizations. 
-
+All data are linked based on their Belgian NIS codes for 2025. In the original dataset 13 municipalities had missing geographic data due to their involvement in the 2025 mergers. This data has been appended on 17 February 2026. Their resolution might slightly differ (outlines of the choropleth map) , but the data should be sound. 
 ## Data Processing
 
 - Population density calculated as people per km²  
@@ -33,6 +32,7 @@ Built with:
 - **Leaflet** for interactive mapping  
 - **PostgreSQL/PostGIS** for a responsive and robust data storage backbone, including storing spatial data  
 - **sf** package for spatial operations  
+- ** luwitemplate** package, for custom styling
 - **Minisforum UN100P** mini computer with Ubuntu 24.04 LTS server as the hosting platform  
 - **Shiny Server** for R application deployment  
 - **Cloudflare Tunnel** to facilitate secure public hosting with this free service
